@@ -1,0 +1,11319 @@
+const App = (() => {
+  const nav = [
+    {id:'dashboard', icon:'🏠', label:'Dashboard'},
+    {id:'intro', icon:'🧭', label:'Platform Guide'},
+    {id:'his', icon:'🏥', label:'HIS Guide'},
+    {id:'quiz', icon:'🎮', label:'Mini Quiz Game'},
+    {id:'terminology', icon:'🔎', label:'Terminology Dictionary'},
+    {id:'coding', icon:'🧾', label:'Medical Coding Lab'},
+    {id:'library', icon:'📚', label:'Medical Library'},
+    {id:'checklists', icon:'☑️', label:'Official Checklists'},
+    {id:'statistics', icon:'📈', label:'Hospital Statistics Indicators'},
+    {id:'directory', icon:'🌐', label:'Websites & Research Directory'},
+    {id:'feedback', icon:'💬', label:'Feedback & Suggestions'},
+    {id:'collaboration', icon:'🤝', label:'Collaboration'},
+    {id:'reports', icon:'🎓', label:'Portfolio & Certificate'},
+  ];
+
+  const defaultState = {
+    currentView:'dashboard',
+    activeStep:0,
+    patient:{
+      patientId:'DH-2026-0001', name:'Sara Rahimi', dob:'1988-03-14', gender:'Female', nationality:'Fictional', phone:'+60 11 0000 0000', address:'Academic simulation dataset', emergency:'Ali Rahimi', insurance:'University Training Plan', allergy:'Penicillin', category:'Inpatient', status:'Admitted', ward:'Medical Ward A', bed:'A-12'
+    },
+    scenario:'Inpatient Pneumonia Case',
+    completedSteps:['Patient Arrival & Registration'],
+    notes:{chief:'Fever, cough, shortness of breath', history:'Symptoms started 4 days ago. Productive cough and fever.', past:'No major past surgical history. Penicillin allergy documented.', diagnosis:'Community acquired pneumonia', treatment:'Antibiotic therapy, oxygen as needed, chest X-ray and CBC ordered.', discharge:''},
+    orders:[
+      {type:'Laboratory', item:'CBC', status:'Result entered', result:'WBC elevated'},
+      {type:'Radiology', item:'Chest X-ray', status:'Report pending', result:'Right lower lobe opacity'},
+      {type:'Pharmacy', item:'Antibiotic order', status:'Checked', result:'Allergy alert reviewed'}
+    ],
+    audit:{
+      'Admission form completed':true,
+      'Patient identifier verified':true,
+      'Consent form available':false,
+      'Allergy documented':true,
+      'Doctor notes completed':true,
+      'Nursing notes completed':false,
+      'Lab results attached':true,
+      'Radiology report attached':false,
+      'Medication chart completed':true,
+      'Discharge summary completed':false,
+      'Diagnosis documented':true,
+      'Physician signature completed':false,
+      'Date and time completed':true,
+      'Coding completed':false
+    },
+    missingDocs:[
+      {patientId:'DH-2026-0001', document:'Consent Form', unit:'Ward Clerk', status:'Pending', followUp:'2026-07-10'},
+      {patientId:'DH-2026-0001', document:'Radiology Report', unit:'Radiology', status:'In progress', followUp:'2026-07-10'},
+      {patientId:'DH-2026-0001', document:'Discharge Summary', unit:'Physician', status:'Pending', followUp:'2026-07-11'}
+    ],
+    coding:{primary:'', secondary:'', procedure:'', query:'', feedback:''},
+    quiz:{terminology:0, coding:0, privacy:0},
+    quizGame:{course:'Medical Terminology', index:0, score:0, answered:0, streak:0, bestStreak:0, selected:null, feedback:null, finished:false, results:{}},
+    portfolio:[]
+  };
+
+  let state = loadState();
+  let deferredPrompt = null;
+
+  const steps = [
+    {id:'Patient Arrival & Registration', icon:'🪪', desc:'Register patient identity, create MRN and verify MPI.', roles:['Reception / Registration Clerk','Medical Records Staff','HIS User'], systems:['Patient Registration','Master Patient Index','Insurance Verification'], documents:['Registration Form','Patient Identifier','Insurance / Eligibility Form'], practice:'Create or verify a fictional patient, check duplicate risk and save demographic data.', risk:'Wrong identity or duplicate MRN can affect safety, billing and reporting.'},
+    {id:'Triage / Initial Assessment', icon:'🚑', desc:'Record emergency priority, vital signs and first risk level.', roles:['Triage Nurse','Emergency Physician','ED Clerk'], systems:['Emergency Module','Triage Screen','Vital Signs'], documents:['Triage Note','Vital Signs Chart','Chief Complaint'], practice:'Choose triage level, document vital signs and identify urgent alerts.', risk:'Missing triage information can delay care and affect patient safety.'},
+    {id:'Insurance & Eligibility', icon:'💳', desc:'Check payer, coverage, guarantee letter and financial class.', roles:['Insurance Officer','Billing Staff','Admission Clerk'], systems:['Insurance Module','Billing Pre-authorization'], documents:['Insurance Card','Guarantee Letter','Eligibility Note'], practice:'Verify insurance status and flag missing financial documents.', risk:'Incomplete eligibility can delay admission, billing or discharge.'},
+    {id:'Admission Decision & Bed Management', icon:'🛏️', desc:'Decide outpatient, inpatient, transfer, observation or referral path.', roles:['Treating Physician','Bed Manager','Nurse Supervisor','Ward Clerk'], systems:['ADT Module','Bed Management','Ward Census'], documents:['Admission Order','Bed Assignment','Transfer Request'], practice:'Select patient category, status, ward and bed for the simulated care path.', risk:'Incorrect admission status can affect statistics, clinical workflow and billing.'},
+    {id:'Ward Admission', icon:'🏥', desc:'Receive patient in ward and start inpatient record.', roles:['Ward Nurse','Ward Clerk','Attending Physician'], systems:['Ward Module','EMR','Nursing Documentation'], documents:['Nursing Admission Note','Consent Form','Care Plan'], practice:'Confirm ward reception, consent availability and initial nursing note.', risk:'Missing consent or ward note creates documentation and legal risk.'},
+    {id:'Clinical Assessment & EMR Documentation', icon:'📝', desc:'Document history, examination, diagnosis and treatment plan.', roles:['Physician','Resident','Nurse','Clinical Documentation Reviewer'], systems:['EMR Clinical Notes','Diagnosis Entry','Problem List'], documents:['Chief Complaint','HPI','Physical Exam','Diagnosis','Treatment Plan'], practice:'Write core clinical documentation and check consistency between diagnosis and plan.', risk:'Incomplete clinical documentation weakens coding, continuity of care and audit results.'},
+    {id:'CPOE Orders & Care Plan', icon:'📋', desc:'Enter medication, laboratory, radiology, diet, consult and procedure orders.', roles:['Physician','Nurse','Pharmacist','Allied Health Staff'], systems:['CPOE','Care Plan','Order Management'], documents:['Doctor Orders','Medication Order','Lab/Radiology Request'], practice:'Review fictional orders and identify whether order type, indication and status are complete.', risk:'Incomplete orders can cause delays, duplication or unsafe care.'},
+    {id:'Laboratory Workflow', icon:'🧪', desc:'Receive specimen, process tests, validate and attach results.', roles:['Lab Technician','Pathologist','Nurse','Physician'], systems:['LIS','EMR Results','LOINC Mapping'], documents:['Lab Request','CBC/Biochemistry Result','Critical Result Note'], practice:'Validate lab status and attach results to the patient record.', risk:'Unattached or unreviewed lab results can create clinical and audit risk.'},
+    {id:'Radiology & Imaging Workflow', icon:'🩻', desc:'Request imaging, perform study, report result and attach to EMR.', roles:['Radiology Technician','Radiologist','Physician','Ward Clerk'], systems:['RIS','PACS','DICOM Viewer','EMR Imaging Results'], documents:['Radiology Request','Imaging Report','Image Availability Note'], practice:'Track radiology request and report status.', risk:'Pending imaging reports often become missing documents after discharge.'},
+    {id:'Pharmacy & Medication Safety', icon:'💊', desc:'Check medication order, allergy, interaction, dispensing and administration.', roles:['Physician','Pharmacist','Clinical Pharmacist','Nurse'], systems:['Pharmacy Module','Medication Administration Record','Allergy Alert'], documents:['Medication Chart','MAR','Medication Reconciliation'], practice:'Review medication safety and allergy documentation.', risk:'Unreviewed allergy or medication reconciliation can harm patients.'},
+    {id:'Specialist Consultation', icon:'👨‍⚕️', desc:'Request and document specialist consult opinions.', roles:['Attending Physician','Specialist Consultant','Nurse','Ward Clerk'], systems:['Consultation Module','EMR Notes'], documents:['Consult Request','Consult Note','Specialist Recommendation'], practice:'Record consult request status and ensure final consult note is available.', risk:'Missing consult notes can affect treatment decisions and coding support.'},
+    {id:'Surgery / Procedure / Anesthesia', icon:'🏨', desc:'Manage procedure consent, pre-op checklist, operation note and anesthesia record.', roles:['Surgeon','Anesthesiologist','OR Nurse','Recovery Nurse','CSSD'], systems:['Operating Room Module','Anesthesia Record','Procedure Coding'], documents:['Surgical Consent','Pre-op Checklist','Operative Report','Anesthesia Record','Recovery Note'], practice:'Complete surgery/procedure documentation checklist for the fictional case.', risk:'Missing operative or anesthesia reports are high-priority audit findings.'},
+    {id:'Daily Nursing Care & Progress Notes', icon:'📈', desc:'Document progress notes, nursing care, vital signs and treatment response.', roles:['Attending Physician','Resident','Ward Nurse','Allied Health Team'], systems:['Progress Notes','Nursing Notes','Vital Signs Chart'], documents:['Daily Progress Note','Nursing Note','Intake/Output','Patient Education'], practice:'Review daily documentation and identify missing notes.', risk:'Gaps in daily documentation reduce continuity, safety and legal defensibility.'},
+    {id:'Discharge Planning', icon:'🧭', desc:'Prepare follow-up, patient education, medication and discharge readiness.', roles:['Physician','Nurse','Pharmacist','Social Worker','Billing/Insurance'], systems:['Discharge Planning','eDischarge','Patient Portal'], documents:['Discharge Order','Patient Education','Follow-up Appointment','Medication at Discharge'], practice:'Plan patient exit and prepare discharge requirements.', risk:'Poor discharge planning increases readmission, complaints and incomplete records.'},
+    {id:'Clinical Outcome: Discharge / Transfer / Death', icon:'🚪', desc:'Practice final patient outcome including normal discharge, referral/transfer or death.', roles:['Physician','Nurse','Medical Records Staff','Mortuary/Morgue Staff','Family Liaison'], systems:['ADT Discharge','Death Registry','Transfer/Referral Module'], documents:['Discharge Summary','Referral Letter','Death Certificate','Body Release Form'], practice:'Select the final outcome and complete the correct documentation path.', risk:'Death and transfer cases require complete, accurate and legally sensitive documentation.'},
+    {id:'Medical Records Review', icon:'✅', desc:'Check record completeness and track missing documents after patient exit.', roles:['Medical Records Officer','Health Information Specialist','Clinical Documentation Reviewer'], systems:['Medical Records Audit','Document Tracking','Scanning/Indexing'], documents:['Audit Checklist','Missing Document Tracker','Deficiency Notice'], practice:'Review completeness and update missing document follow-up.', risk:'Incomplete records reduce coding accuracy, legal readiness and quality reporting.'},
+    {id:'Medical Coding & Mortality Coding', icon:'🏷️', desc:'Code diagnosis, procedures, operations and cause-of-death sequence if patient expired.', roles:['Medical Coder','Health Information Specialist','Physician Responding to Query'], systems:['Coding Module','ICD Browser','Mortality Coding'], documents:['Discharge Summary','Operative Report','Death Certificate','Coding Query'], practice:'Practice morbidity coding and, for death cases, underlying cause-of-death selection.', risk:'Coders must not assume undocumented diagnoses or death causes; query when documentation is unclear.'},
+    {id:'Billing & Insurance Finalization', icon:'💰', desc:'Finalize charges, insurance claim and financial clearance.', roles:['Billing Staff','Insurance Officer','Medical Coder','Finance Department'], systems:['Billing Module','Claims Module','Charge Capture'], documents:['Final Bill','Insurance Claim','Coding Summary','Payment Status'], practice:'Review how documentation and coding affect billing readiness.', risk:'Documentation and code gaps can delay claims or create rejected bills.'},
+    {id:'Archive & Reporting', icon:'📊', desc:'Archive the record, update statistics, dashboards and student portfolio evidence.', roles:['HIM Manager','Medical Records Staff','Data Analyst','Quality Officer','IT/HIS Team'], systems:['Archive','Reporting Dashboard','Data Warehouse'], documents:['Final Record Status','Hospital Statistics','Quality Dashboard','Portfolio Report'], practice:'Generate report and portfolio summary for the simulated patient journey.', risk:'Poor archiving and reporting reduce traceability, compliance and decision-making quality.'}
+  ];
+
+  const hisUserRoles = [
+    'Patient / Guardian',
+    'Registration Clerk',
+    'Triage Nurse',
+    'Physician',
+    'Emergency Observation Nurse',
+    'Ward Nurse',
+    'Laboratory Staff',
+    'Radiology Staff',
+    'Pharmacist',
+    'Surgeon / Procedure Provider',
+    'Anesthesiologist',
+    'OR / Recovery Nurse',
+    'Discharge Clerk',
+    'Billing / Insurance Officer',
+    'Medical Records Receiving Officer',
+    'Quantitative & Qualitative Record Reviewer',
+    'Medical Coder',
+    'Archive Officer',
+    'HIM Manager / Statistics Officer',
+    'HIS Admin / Quality Auditor'
+  ];
+
+  const medicalRecordForms = [
+    {id:'patient_registration', title:'Patient Registration & Identification Form', category:'Administrative / ADT', step:'Patient Arrival & Registration', responsible:['Registration Clerk'], access:['Registration Clerk','Medical Records Officer','HIS Admin / Quality Auditor'], signer:['Patient / Guardian'], fields:[['patientId','MRN / Patient ID',true],['fullName','Full patient name',true],['dob','Date of birth',true],['gender','Gender',true],['phone','Contact number',true],['address','Address',false],['emergency','Emergency contact',false],['insurance','Insurance / payer',false]], source:'Every evaluated or treated patient needs a maintained medical record with identity and retrieval controls.'},
+    {id:'general_consent', title:'General Consent for Treatment & Information Use', category:'Consent / Legal', step:'Ward Admission', responsible:['Registration Clerk','Nurse'], access:['Patient / Guardian','Nurse','Medical Records Officer'], signer:['Patient / Guardian','Nurse'], fields:[['patientName','Patient / guardian name',true],['relationship','Relationship to patient',false],['consentScope','Consent scope',true],['privacyNotice','Privacy notice acknowledged',true],['signature','Patient / guardian signature',true],['witness','Witness name',true]], source:'Consent workflow trains proper patient/guardian authorization and witness documentation.'},
+    {id:'triage_assessment', title:'Emergency Triage & Initial Assessment Form', category:'Clinical / Emergency', step:'Triage / Initial Assessment', responsible:['Triage Nurse'], access:['Triage Nurse','Physician','Medical Records Officer'], signer:['Triage Nurse'], fields:[['chiefComplaint','Chief complaint',true],['triageLevel','Triage priority level',true],['vitals','Vital signs',true],['painScore','Pain score',false],['allergy','Allergy alert',true],['initialAction','Initial nursing action',true]], source:'Vital signs and clinical observations support monitoring and patient safety.'},
+    {id:'admission_order', title:'Admission Order & Bed Assignment Form', category:'ADT / Bed Management', step:'Admission Decision & Bed Management', responsible:['Physician','Registration Clerk','Nurse'], access:['Physician','Nurse','Registration Clerk','HIS Admin / Quality Auditor'], signer:['Physician'], fields:[['admittingDiagnosis','Admitting diagnosis',true],['admissionType','Admission type',true],['ward','Ward / unit',true],['bed','Bed number',true],['attending','Attending physician',true],['orderTime','Order date and time',true]], source:'Admission documentation should justify admission and support the diagnosis.'},
+    {id:'nursing_admission', title:'Nursing Admission Assessment Form', category:'Nursing Documentation', step:'Ward Admission', responsible:['Nurse'], access:['Nurse','Physician','Medical Records Officer'], signer:['Nurse'], fields:[['arrivalCondition','Condition on arrival',true],['fallRisk','Fall risk assessment',true],['skinAssessment','Skin assessment',false],['careNeeds','Nursing care needs',true],['patientEducation','Initial patient education',false],['nurseSignature','Nurse signature',true]], source:'Nursing notes are part of the clinical record and show care provided.'},
+    {id:'history_physical', title:'Medical History & Physical Examination Form', category:'Physician Documentation', step:'Clinical Assessment & EMR Documentation', responsible:['Physician'], access:['Physician','Medical Records Officer','Medical Coder'], signer:['Physician'], fields:[['chiefComplaint','Chief complaint',true],['hpi','History of present illness',true],['pmh','Past medical history',false],['exam','Physical examination',true],['assessment','Assessment / diagnosis',true],['plan','Treatment plan',true],['physicianSignature','Physician signature',true]], source:'H&P supports diagnosis, admission justification and continued hospitalization.'},
+    {id:'physician_orders', title:'Practitioner Orders / CPOE Order Sheet', category:'Orders / CPOE', step:'CPOE Orders & Care Plan', responsible:['Physician'], access:['Physician','Nurse','Pharmacist','Laboratory Staff','Radiology Staff'], signer:['Physician'], fields:[['orderType','Order type',true],['orderDetails','Order details',true],['indication','Clinical indication',true],['priority','Priority / urgency',false],['orderTime','Order date and time',true],['orderingProvider','Ordering provider authentication',true]], source:'Orders should be dated, timed and authenticated by the ordering practitioner.'},
+    {id:'lab_request_result', title:'Laboratory Request & Result Form', category:'Laboratory', step:'Laboratory Workflow', responsible:['Physician','Laboratory Staff'], access:['Physician','Nurse','Laboratory Staff','Medical Records Officer'], signer:['Laboratory Staff'], fields:[['testRequested','Test requested',true],['specimen','Specimen type',true],['collectionTime','Collection time',true],['result','Result summary',true],['criticalFlag','Critical result flag',false],['validatedBy','Validated by',true]], source:'Lab reports support diagnosis, monitoring and audit review.'},
+    {id:'radiology_request_report', title:'Radiology Request & Imaging Report Form', category:'Radiology / PACS', step:'Radiology & Imaging Workflow', responsible:['Physician','Radiology Staff'], access:['Physician','Nurse','Radiology Staff','Medical Records Officer'], signer:['Radiology Staff'], fields:[['studyRequested','Imaging study requested',true],['clinicalIndication','Clinical indication',true],['imageStatus','Image status',true],['findings','Report findings',true],['impression','Radiology impression',true],['radiologist','Radiologist signature',true]], source:'Radiology reports are chart components and support diagnosis and coding.'},
+    {id:'pharmacy_medication', title:'Medication Order, Allergy & Administration Record', category:'Pharmacy / MAR', step:'Pharmacy & Medication Safety', responsible:['Physician','Pharmacist','Nurse'], access:['Physician','Pharmacist','Nurse','Medical Records Officer'], signer:['Pharmacist','Nurse'], fields:[['drugName','Medication name',true],['doseRouteFreq','Dose / route / frequency',true],['allergyCheck','Allergy check',true],['interactionCheck','Interaction check',false],['dispensingStatus','Dispensing status',true],['administrationRecord','Administration documentation',true]], source:'Medication records and allergy/reaction documentation are essential safety elements.'},
+    {id:'consult_note', title:'Specialist Consultation Request & Report', category:'Consultation', step:'Specialist Consultation', responsible:['Physician'], access:['Physician','Nurse','Medical Records Officer','Medical Coder'], signer:['Physician'], fields:[['consultReason','Reason for consult',true],['specialty','Specialty requested',true],['findings','Consult findings',true],['recommendations','Recommendations',true],['communicatedTo','Communicated to treating team',false],['consultantSignature','Consultant signature',true]], source:'Consultative evaluations and findings should be available in the chart.'},
+    {id:'surgical_consent', title:'Procedure / Surgical Informed Consent Form', category:'Surgery / Consent', step:'Surgery / Procedure / Anesthesia', responsible:['Surgeon / Procedure Provider','Nurse'], access:['Patient / Guardian','Surgeon / Procedure Provider','Nurse','Medical Records Officer'], signer:['Patient / Guardian','Surgeon / Procedure Provider','Nurse'], fields:[['procedureName','Procedure / operation name',true],['benefitsRisks','Benefits, risks and alternatives discussed',true],['siteLaterality','Site / laterality',true],['patientQuestions','Patient questions answered',false],['patientSignature','Patient / guardian signature',true],['providerSignature','Provider signature',true]], source:'Surgical consent must be present in the chart before surgery except emergencies.'},
+    {id:'who_safety_checklist', title:'Surgical Safety Checklist Form', category:'Surgery / Safety', step:'Surgery / Procedure / Anesthesia', responsible:['OR / Recovery Nurse','Surgeon / Procedure Provider','Anesthesiologist'], access:['OR / Recovery Nurse','Surgeon / Procedure Provider','Anesthesiologist','Medical Records Officer'], signer:['OR / Recovery Nurse'], fields:[['signIn','Sign-in completed',true],['timeOut','Time-out completed',true],['signOut','Sign-out completed',true],['specimenLabel','Specimen labeling confirmed',false],['countComplete','Instrument / sponge count complete',true],['teamConcerns','Team concerns documented',false]], source:'Based on WHO checklist phases: sign-in, time-out and sign-out.'},
+    {id:'operative_report', title:'Operative / Procedure Report Form', category:'Surgery / Procedure', step:'Surgery / Procedure / Anesthesia', responsible:['Surgeon / Procedure Provider'], access:['Surgeon / Procedure Provider','Nurse','Medical Coder','Medical Records Officer'], signer:['Surgeon / Procedure Provider'], fields:[['preOpDiagnosis','Pre-operative diagnosis',true],['postOpDiagnosis','Post-operative diagnosis',true],['procedurePerformed','Procedure performed',true],['findings','Operative findings',true],['specimens','Specimens / tissues removed',false],['surgeonSignature','Surgeon signature',true]], source:'Operative reports should describe techniques, findings and tissues removed or altered.'},
+    {id:'anesthesia_recovery', title:'Anesthesia & Recovery Record', category:'Anesthesia / Recovery', step:'Surgery / Procedure / Anesthesia', responsible:['Anesthesiologist','OR / Recovery Nurse'], access:['Anesthesiologist','OR / Recovery Nurse','Surgeon / Procedure Provider','Medical Records Officer'], signer:['Anesthesiologist','OR / Recovery Nurse'], fields:[['anesthesiaType','Anesthesia type',true],['preAnesthesiaAssessment','Pre-anesthesia assessment',true],['intraOpMonitoring','Intra-operative monitoring',true],['recoveryCondition','Recovery condition',true],['postOpOrders','Post-operative orders',false],['signature','Authorized signature',true]], source:'Surgical workflow includes anesthesia and immediate post-operative care records.'},
+    {id:'progress_note', title:'Daily Progress Note / SOAP Note', category:'Clinical Progress', step:'Daily Nursing Care & Progress Notes', responsible:['Physician','Nurse'], access:['Physician','Nurse','Medical Records Officer','Medical Coder'], signer:['Physician','Nurse'], fields:[['subjective','Subjective / patient status',true],['objective','Objective findings / vitals',true],['assessment','Assessment',true],['plan','Plan',true],['education','Patient education',false],['signature','Authenticated by',true]], source:'Progress notes describe patient progress and response to treatment.'},
+    {id:'discharge_summary', title:'Discharge Summary Form', category:'Discharge Documentation', step:'Discharge Planning', responsible:['Physician'], access:['Physician','Nurse','Medical Records Officer','Medical Coder','Billing / Insurance Officer'], signer:['Physician'], fields:[['reasonAdmission','Reason for admission',true],['finalDiagnosis','Final diagnosis',true],['hospitalCourse','Hospital course',true],['procedures','Procedures performed',false],['conditionDischarge','Condition at discharge',true],['followUp','Follow-up care',true],['physicianSignature','Physician signature',true]], source:'Discharge summary should include outcome, disposition and follow-up care.'},
+    {id:'death_documentation', title:'Death Documentation & Mortality Coding Worksheet', category:'Death / Mortality Coding', step:'Clinical Outcome: Discharge / Transfer / Death', responsible:['Physician','Medical Coder','Medical Records Officer'], access:['Physician','Nurse','Medical Records Officer','Medical Coder'], signer:['Physician'], fields:[['pronouncedBy','Pronounced by',true],['pronouncedTime','Date and time of death',true],['immediateCause','Immediate cause of death',true],['intermediateCause','Intermediate cause',false],['underlyingCause','Underlying cause of death',true],['contributingConditions','Other contributing conditions',false],['bodyRelease','Body release status',true]], source:'Death cases require accurate documentation and mortality coding review.'},
+    {id:'audit_deficiency', title:'Medical Record Audit & Deficiency Notice', category:'HIM / Audit', step:'Medical Records Review', responsible:['Medical Records Officer','HIS Admin / Quality Auditor'], access:['Medical Records Officer','Medical Coder','Physician','Nurse','HIS Admin / Quality Auditor'], signer:['Medical Records Officer'], fields:[['recordStatus','Record completeness status',true],['missingItems','Missing documents / deficiencies',true],['responsibleUnit','Responsible unit',true],['riskLevel','Risk level',true],['followUpDate','Follow-up date',true],['auditorSignature','Auditor signature',true]], source:'Audit determines whether the chart is ready for coding, archive, release and reporting.'},
+    {id:'coding_query', title:'Coding Query / Clarification Form', category:'Medical Coding', step:'Medical Coding & Mortality Coding', responsible:['Medical Coder','Physician'], access:['Medical Coder','Physician','Medical Records Officer'], signer:['Medical Coder','Physician'], fields:[['queryReason','Reason for query',true],['clinicalIndicators','Clinical indicators',true],['clarificationNeeded','Clarification requested',true],['physicianResponse','Physician response',false],['coderName','Coder name',true],['finalAction','Final coding action',false]], source:'Coding query supports accurate coding when documentation is ambiguous or incomplete.'},
+    {id:'billing_clearance', title:'Billing, Insurance & Final Clearance Form', category:'Billing / Insurance', step:'Billing & Insurance Finalization', responsible:['Billing / Insurance Officer'], access:['Billing / Insurance Officer','Medical Coder','Medical Records Officer'], signer:['Billing / Insurance Officer'], fields:[['coverageStatus','Coverage / eligibility status',true],['codingSummary','Coding summary received',true],['chargesReviewed','Charges reviewed',true],['claimStatus','Claim / billing status',true],['patientBalance','Patient balance',false],['officerSignature','Billing officer signature',true]], source:'Billing readiness depends on documentation completeness and coding status.'}
+  ];
+
+  const learningModules = [
+    {icon:'🩺', title:'Medical Terminology', level:'Core Foundation', body:'Medical word parts, body-system terms, clinical abbreviations and documentation language used in coding, records and hospital practice.'},
+    {icon:'🧾', title:'Medical Coding', level:'Core Practice', body:'Story-based coding examples organized by body system and specialty, including principal diagnosis, secondary diagnoses, procedures, surgery, drugs and mortality examples.'},
+    {icon:'💻', title:'Digital Health & Medical Technology', level:'Digital Health', body:'Digital health concepts, medical technology, health apps, remote-care concepts, clinical decision support, health data tools and technology resources.'},
+    {icon:'🗂️', title:'Health Information Management', level:'Medical Records', body:'Medical filing, active and inactive records, retention, disposition, special records, release control and hospital record-management workflows.'},
+    {icon:'🔗', title:'Health Informatics Standards', level:'Standards', body:'FHIR, HL7, SNOMED CT, LOINC, DICOM, ICD, RxNorm, terminology standards, interoperability concepts and research directory resources.'},
+    {icon:'📈', title:'Hospital Statistics & Analytics', level:'Reporting', body:'Hospital indicators, patient-flow statistics, maternity, mortality, surgery, emergency, diagnostic-service and HIM statistics with completion rules and reporting responsibilities.'}
+  ];
+
+  const officialResources = [
+    {area:'Medical Terminology', org:'U.S. National Library of Medicine', title:'MedlinePlus Medical Words', type:'Terminology learning', use:'Student-friendly medical word learning and pronunciation support for terminology classes.', url:'https://medlineplus.gov/medwords/'},
+    {area:'Medical Terminology', org:'National Library of Medicine', title:'MeSH Browser', type:'Controlled vocabulary', use:'Explore biomedical subject headings used in indexing, searching and research vocabulary.', url:'https://meshb.nlm.nih.gov/search'},
+    {area:'Medical Coding', org:'World Health Organization', title:'ICD-11 Browser', type:'Classification system', use:'Official browser for ICD-11 disease and health condition classification concepts.', url:'https://icd.who.int/browse/latest-release/mms/en'},
+    {area:'Medical Coding', org:'CDC/NCHS', title:'ICD-10-CM Browser Tool', type:'Coding browser', use:'Practice searching ICD-10-CM diagnosis codes, index terms, tabular lists and official guidance.', url:'https://icd10cmtool.cdc.gov/'},
+    {area:'Digital Health', org:'World Health Organization', title:'Digital Health Topic Page', type:'Global reference', use:'Understand WHO digital health priorities, strategies, tools and global initiatives.', url:'https://www.who.int/health-topics/digital-health'},
+    {area:'Digital Health', org:'World Health Organization', title:'Global Strategy on Digital Health', type:'Strategy document', use:'Core reading for digital health policy, governance and transformation planning.', url:'https://www.who.int/publications/i/item/9789240020924'},
+    {area:'HIS & EMR', org:'ONC HealthIT.gov', title:'Health IT Playbook', type:'Implementation guide', use:'Practical guidance for implementing, optimizing and safely using health IT systems.', url:'https://www.healthit.gov/playbook/'},
+    {area:'HIS & EMR', org:'ONC HealthIT.gov', title:'Certified Health IT Product List', type:'Health IT systems', use:'Explore certified health IT modules and understand real-world EHR/HIS certification concepts.', url:'https://chpl.healthit.gov/'},
+    {area:'HIS & EMR', org:'ONC HealthIT.gov', title:'Health IT Curriculum Resources for Educators', type:'Educator resource', use:'Instructional materials for teaching health IT, interoperability and workflow concepts.', url:'https://www.healthit.gov/topic/resources/health-it-curriculum-resources-educators'},
+    {area:'Interoperability', org:'HL7 International', title:'FHIR Specification Overview', type:'Standard documentation', use:'Learn FHIR resources, APIs and the structure of electronic health data exchange.', url:'https://www.hl7.org/fhir/overview.html'},
+    {area:'Interoperability', org:'ONC HealthIT.gov', title:'HL7 FHIR Fact Sheets', type:'FHIR education', use:'Clear explanations of FHIR, resources, API concepts and the role of standards in interoperability.', url:'https://healthit.gov/interoperability/investments/fhir/'},
+    {area:'Interoperability', org:'SNOMED International', title:'SNOMED CT', type:'Clinical terminology', use:'Reference for clinical terms used in EHR documentation and semantic interoperability.', url:'https://www.snomed.org/snomed-ct'},
+    {area:'Interoperability', org:'LOINC', title:'LOINC', type:'Laboratory terminology', use:'Reference standard for identifying lab tests, observations, measurements and documents.', url:'https://loinc.org/'},
+    {area:'Interoperability', org:'DICOM Standard', title:'DICOM Standard', type:'Imaging standard', use:'Reference for medical imaging exchange, PACS, radiology workflows and DICOMweb concepts.', url:'https://www.dicomstandard.org/'},
+    {area:'Privacy & Law', org:'U.S. HHS', title:'HIPAA Privacy Rule', type:'Privacy regulation', use:'Core reference for protected health information, patient rights, permitted disclosures and privacy safeguards.', url:'https://www.hhs.gov/hipaa/for-professionals/privacy/index.html'},
+    {area:'Privacy & Law', org:'U.S. HHS', title:'HIPAA Security Rule', type:'Security regulation', use:'Reference for administrative, physical and technical safeguards for electronic protected health information.', url:'https://www.hhs.gov/hipaa/for-professionals/security/index.html'},
+    {area:'Data Quality', org:'AHIMA', title:'Data Quality and Integrity', type:'HIM policy statement', use:'Understand duplicate records, patient identification, documentation quality, standards and workforce training issues.', url:'https://www.ahima.org/advocacy/policy-statements/data-quality-and-integrity/'},
+    {area:'Data Quality', org:'ONC HealthIT.gov', title:'Health IT Research & Analysis', type:'Analytics resources', use:'Datasets, dashboards and reports for health IT adoption, use and data-informed policy learning.', url:'https://www.healthit.gov/data'},
+    {area:'AI & SaMD', org:'U.S. FDA', title:'Software as a Medical Device', type:'Regulatory reference', use:'Understand SaMD, clinical decision support software, AI-enabled medical devices and regulatory concepts.', url:'https://www.fda.gov/medical-devices/digital-health-center-excellence/software-medical-device-samd'},
+    {area:'AI & SaMD', org:'World Health Organization', title:'Ethics and Governance of AI for Health', type:'AI governance', use:'Reference for ethical, safe and responsible use of AI in health systems.', url:'https://www.who.int/publications/i/item/9789240029200'}
+  ];
+
+  const terms = [
+  [
+    "a-, an-",
+    "Prefix or word part",
+    "A medical prefix meaning without; absence of.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "ab-",
+    "Prefix or word part",
+    "A medical prefix meaning away from.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "ad-",
+    "Prefix or word part",
+    "A medical prefix meaning toward; near.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "anti-",
+    "Prefix or word part",
+    "A medical prefix meaning against.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "auto-",
+    "Prefix or word part",
+    "A medical prefix meaning self.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "bi-",
+    "Prefix or word part",
+    "A medical prefix meaning two; double.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "brady-",
+    "Prefix or word part",
+    "A medical prefix meaning slow.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "tachy-",
+    "Prefix or word part",
+    "A medical prefix meaning fast.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "dys-",
+    "Prefix or word part",
+    "A medical prefix meaning difficult, painful or abnormal.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "eu-",
+    "Prefix or word part",
+    "A medical prefix meaning normal or good.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "hyper-",
+    "Prefix or word part",
+    "A medical prefix meaning above normal; excessive.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "hypo-",
+    "Prefix or word part",
+    "A medical prefix meaning below normal; deficient.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "inter-",
+    "Prefix or word part",
+    "A medical prefix meaning between.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "intra-",
+    "Prefix or word part",
+    "A medical prefix meaning within.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "extra-",
+    "Prefix or word part",
+    "A medical prefix meaning outside.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "endo-",
+    "Prefix or word part",
+    "A medical prefix meaning within; inside.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "ecto-",
+    "Prefix or word part",
+    "A medical prefix meaning outside; outer.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "epi-",
+    "Prefix or word part",
+    "A medical prefix meaning upon; above.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "sub-",
+    "Prefix or word part",
+    "A medical prefix meaning under; below.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "supra-",
+    "Prefix or word part",
+    "A medical prefix meaning above.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "peri-",
+    "Prefix or word part",
+    "A medical prefix meaning around.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "para-",
+    "Prefix or word part",
+    "A medical prefix meaning near; beside; abnormal.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "pre-",
+    "Prefix or word part",
+    "A medical prefix meaning before.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "post-",
+    "Prefix or word part",
+    "A medical prefix meaning after.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "retro-",
+    "Prefix or word part",
+    "A medical prefix meaning behind; backward.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "re-",
+    "Prefix or word part",
+    "A medical prefix meaning again; back.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "trans-",
+    "Prefix or word part",
+    "A medical prefix meaning across; through.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "hemi-",
+    "Prefix or word part",
+    "A medical prefix meaning half.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "semi-",
+    "Prefix or word part",
+    "A medical prefix meaning partial; half.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "pan-",
+    "Prefix or word part",
+    "A medical prefix meaning all.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "poly-",
+    "Prefix or word part",
+    "A medical prefix meaning many; much.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "oligo-",
+    "Prefix or word part",
+    "A medical prefix meaning few; scanty.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "mono-",
+    "Prefix or word part",
+    "A medical prefix meaning one.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "multi-",
+    "Prefix or word part",
+    "A medical prefix meaning many.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "micro-",
+    "Prefix or word part",
+    "A medical prefix meaning small.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "macro-",
+    "Prefix or word part",
+    "A medical prefix meaning large.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "mega-",
+    "Prefix or word part",
+    "A medical prefix meaning large; enlarged.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "neo-",
+    "Prefix or word part",
+    "A medical prefix meaning new.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "pseudo-",
+    "Prefix or word part",
+    "A medical prefix meaning false.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "contra-",
+    "Prefix or word part",
+    "A medical prefix meaning against.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "ipsi-",
+    "Prefix or word part",
+    "A medical prefix meaning same side.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "contra-lateral",
+    "Prefix or word part",
+    "A medical prefix meaning opposite side.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "iso-",
+    "Prefix or word part",
+    "A medical prefix meaning equal; same.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "hetero-",
+    "Prefix or word part",
+    "A medical prefix meaning different.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "homo-",
+    "Prefix or word part",
+    "A medical prefix meaning same.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "ortho-",
+    "Prefix or word part",
+    "A medical prefix meaning straight; correct.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "ambly-",
+    "Prefix or word part",
+    "A medical prefix meaning dim; dull.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "leuko-",
+    "Prefix or word part",
+    "A medical prefix meaning white.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "erythro-",
+    "Prefix or word part",
+    "A medical prefix meaning red.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "cyan-",
+    "Prefix or word part",
+    "A medical prefix meaning blue.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "melan-",
+    "Prefix or word part",
+    "A medical prefix meaning black.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "xanth-",
+    "Prefix or word part",
+    "A medical prefix meaning yellow.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "pyo-",
+    "Prefix or word part",
+    "A medical prefix meaning pus.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "septic-",
+    "Prefix or word part",
+    "A medical prefix meaning infection; putrefaction.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "aseptic-",
+    "Prefix or word part",
+    "A medical prefix meaning without infection.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "aneurysm/o-",
+    "Prefix or word part",
+    "A medical prefix meaning widening or dilation.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "de-",
+    "Prefix or word part",
+    "A medical prefix meaning down; away from; removal.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "dis-",
+    "Prefix or word part",
+    "A medical prefix meaning apart; separation.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "pro-",
+    "Prefix or word part",
+    "A medical prefix meaning before; forward.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "ultra-",
+    "Prefix or word part",
+    "A medical prefix meaning beyond.",
+    "Used to build, read and interpret medical terminology in clinical notes and health records.",
+    "Medical Terminology - Prefixes"
+  ],
+  [
+    "-algia",
+    "Suffix or word part",
+    "A medical suffix meaning pain.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-ectomy",
+    "Suffix or word part",
+    "A medical suffix meaning surgical removal.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-otomy",
+    "Suffix or word part",
+    "A medical suffix meaning cutting into; incision.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-ostomy",
+    "Suffix or word part",
+    "A medical suffix meaning creation of an opening.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-plasty",
+    "Suffix or word part",
+    "A medical suffix meaning surgical repair.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-rrhaphy",
+    "Suffix or word part",
+    "A medical suffix meaning suture; surgical repair.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-scopy",
+    "Suffix or word part",
+    "A medical suffix meaning visual examination with a scope.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-graphy",
+    "Suffix or word part",
+    "A medical suffix meaning recording or imaging process.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-gram",
+    "Suffix or word part",
+    "A medical suffix meaning record or image.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-graph",
+    "Suffix or word part",
+    "A medical suffix meaning instrument used to record.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-meter",
+    "Suffix or word part",
+    "A medical suffix meaning instrument used to measure.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-metry",
+    "Suffix or word part",
+    "A medical suffix meaning process of measuring.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-scope",
+    "Suffix or word part",
+    "A medical suffix meaning instrument used for viewing.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-itis",
+    "Suffix or word part",
+    "A medical suffix meaning inflammation.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-osis",
+    "Suffix or word part",
+    "A medical suffix meaning condition, usually abnormal.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-emia",
+    "Suffix or word part",
+    "A medical suffix meaning blood condition.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-uria",
+    "Suffix or word part",
+    "A medical suffix meaning urine condition.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-pathy",
+    "Suffix or word part",
+    "A medical suffix meaning disease.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-oma",
+    "Suffix or word part",
+    "A medical suffix meaning tumor or mass.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-megaly",
+    "Suffix or word part",
+    "A medical suffix meaning enlargement.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-malacia",
+    "Suffix or word part",
+    "A medical suffix meaning softening.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-sclerosis",
+    "Suffix or word part",
+    "A medical suffix meaning hardening.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-stenosis",
+    "Suffix or word part",
+    "A medical suffix meaning narrowing.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-ptosis",
+    "Suffix or word part",
+    "A medical suffix meaning drooping; downward displacement.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-cele",
+    "Suffix or word part",
+    "A medical suffix meaning hernia or protrusion.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-rrhea",
+    "Suffix or word part",
+    "A medical suffix meaning flow or discharge.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-rrhage",
+    "Suffix or word part",
+    "A medical suffix meaning bursting forth; excessive flow.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-rrhagia",
+    "Suffix or word part",
+    "A medical suffix meaning excessive bleeding or flow.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-penia",
+    "Suffix or word part",
+    "A medical suffix meaning deficiency; decrease.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-cytosis",
+    "Suffix or word part",
+    "A medical suffix meaning increase in cells.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-phagia",
+    "Suffix or word part",
+    "A medical suffix meaning eating or swallowing.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-phasia",
+    "Suffix or word part",
+    "A medical suffix meaning speech.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-phobia",
+    "Suffix or word part",
+    "A medical suffix meaning fear.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-plegia",
+    "Suffix or word part",
+    "A medical suffix meaning paralysis.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-paresis",
+    "Suffix or word part",
+    "A medical suffix meaning weakness or partial paralysis.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-pnea",
+    "Suffix or word part",
+    "A medical suffix meaning breathing.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-cardia",
+    "Suffix or word part",
+    "A medical suffix meaning heart condition or heart rate.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-trophy",
+    "Suffix or word part",
+    "A medical suffix meaning development or nourishment.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-plasia",
+    "Suffix or word part",
+    "A medical suffix meaning formation or growth.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-genesis",
+    "Suffix or word part",
+    "A medical suffix meaning origin or formation.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-genic",
+    "Suffix or word part",
+    "A medical suffix meaning originating or producing.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-logy",
+    "Suffix or word part",
+    "A medical suffix meaning study of.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-logist",
+    "Suffix or word part",
+    "A medical suffix meaning specialist.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-therapy",
+    "Suffix or word part",
+    "A medical suffix meaning treatment.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-diagnosis",
+    "Suffix or word part",
+    "A medical suffix meaning identification of a disease or condition.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-prognosis",
+    "Suffix or word part",
+    "A medical suffix meaning expected outcome.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-iatry",
+    "Suffix or word part",
+    "A medical suffix meaning medical treatment; specialty.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-iatrics",
+    "Suffix or word part",
+    "A medical suffix meaning medical specialty.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-cide",
+    "Suffix or word part",
+    "A medical suffix meaning killing.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-lysis",
+    "Suffix or word part",
+    "A medical suffix meaning breakdown; destruction; separation.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-desis",
+    "Suffix or word part",
+    "A medical suffix meaning surgical binding or fixation.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-clasis",
+    "Suffix or word part",
+    "A medical suffix meaning breaking.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-pexy",
+    "Suffix or word part",
+    "A medical suffix meaning surgical fixation.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-tripsy",
+    "Suffix or word part",
+    "A medical suffix meaning crushing.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-centesis",
+    "Suffix or word part",
+    "A medical suffix meaning surgical puncture to remove fluid.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-tome",
+    "Suffix or word part",
+    "A medical suffix meaning instrument used to cut.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-stasis",
+    "Suffix or word part",
+    "A medical suffix meaning stopping or controlling.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-oid",
+    "Suffix or word part",
+    "A medical suffix meaning resembling.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-form",
+    "Suffix or word part",
+    "A medical suffix meaning in the shape of.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-ous",
+    "Suffix or word part",
+    "A medical suffix meaning pertaining to.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-al",
+    "Suffix or word part",
+    "A medical suffix meaning pertaining to.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-ic",
+    "Suffix or word part",
+    "A medical suffix meaning pertaining to.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-ar",
+    "Suffix or word part",
+    "A medical suffix meaning pertaining to.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-eal",
+    "Suffix or word part",
+    "A medical suffix meaning pertaining to.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-able",
+    "Suffix or word part",
+    "A medical suffix meaning capable of.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-toxic",
+    "Suffix or word part",
+    "A medical suffix meaning poisonous.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-lepsy",
+    "Suffix or word part",
+    "A medical suffix meaning seizure or attack.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "-phylaxis",
+    "Suffix or word part",
+    "A medical suffix meaning protection or prevention.",
+    "Used to identify diseases, procedures, findings and documentation language.",
+    "Medical Terminology - Suffixes"
+  ],
+  [
+    "cardi/o",
+    "Root or combining form",
+    "A medical root or combining form meaning heart.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "angi/o",
+    "Root or combining form",
+    "A medical root or combining form meaning vessel.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "arteri/o",
+    "Root or combining form",
+    "A medical root or combining form meaning artery.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "ven/o",
+    "Root or combining form",
+    "A medical root or combining form meaning vein.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "phleb/o",
+    "Root or combining form",
+    "A medical root or combining form meaning vein.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "hem/o",
+    "Root or combining form",
+    "A medical root or combining form meaning blood.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "hemat/o",
+    "Root or combining form",
+    "A medical root or combining form meaning blood.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "erythr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning red blood cell; red.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "leuk/o",
+    "Root or combining form",
+    "A medical root or combining form meaning white blood cell; white.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "thromb/o",
+    "Root or combining form",
+    "A medical root or combining form meaning clot.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "pulmon/o",
+    "Root or combining form",
+    "A medical root or combining form meaning lung.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "pneum/o",
+    "Root or combining form",
+    "A medical root or combining form meaning lung or air.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "bronch/o",
+    "Root or combining form",
+    "A medical root or combining form meaning bronchus.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "bronchiol/o",
+    "Root or combining form",
+    "A medical root or combining form meaning bronchiole.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "laryng/o",
+    "Root or combining form",
+    "A medical root or combining form meaning larynx.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "pharyng/o",
+    "Root or combining form",
+    "A medical root or combining form meaning pharynx.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "rhin/o",
+    "Root or combining form",
+    "A medical root or combining form meaning nose.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "sinus/o",
+    "Root or combining form",
+    "A medical root or combining form meaning sinus.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "pleur/o",
+    "Root or combining form",
+    "A medical root or combining form meaning pleura.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "spir/o",
+    "Root or combining form",
+    "A medical root or combining form meaning breathing.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "gastr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning stomach.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "enter/o",
+    "Root or combining form",
+    "A medical root or combining form meaning intestine.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "col/o",
+    "Root or combining form",
+    "A medical root or combining form meaning colon.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "colon/o",
+    "Root or combining form",
+    "A medical root or combining form meaning colon.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "hepat/o",
+    "Root or combining form",
+    "A medical root or combining form meaning liver.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cholecyst/o",
+    "Root or combining form",
+    "A medical root or combining form meaning gallbladder.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cholangi/o",
+    "Root or combining form",
+    "A medical root or combining form meaning bile duct.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "pancreat/o",
+    "Root or combining form",
+    "A medical root or combining form meaning pancreas.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "esophag/o",
+    "Root or combining form",
+    "A medical root or combining form meaning esophagus.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "proct/o",
+    "Root or combining form",
+    "A medical root or combining form meaning rectum or anus.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "nephr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning kidney.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "ren/o",
+    "Root or combining form",
+    "A medical root or combining form meaning kidney.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "ureter/o",
+    "Root or combining form",
+    "A medical root or combining form meaning ureter.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cyst/o",
+    "Root or combining form",
+    "A medical root or combining form meaning bladder.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "vesic/o",
+    "Root or combining form",
+    "A medical root or combining form meaning bladder.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "urethr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning urethra.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "ur/o",
+    "Root or combining form",
+    "A medical root or combining form meaning urine or urinary tract.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "orchid/o",
+    "Root or combining form",
+    "A medical root or combining form meaning testis.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "oophor/o",
+    "Root or combining form",
+    "A medical root or combining form meaning ovary.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "hyster/o",
+    "Root or combining form",
+    "A medical root or combining form meaning uterus.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "gynec/o",
+    "Root or combining form",
+    "A medical root or combining form meaning female reproductive system.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "obstetr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning pregnancy and childbirth.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "mamm/o",
+    "Root or combining form",
+    "A medical root or combining form meaning breast.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "mast/o",
+    "Root or combining form",
+    "A medical root or combining form meaning breast.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "prostat/o",
+    "Root or combining form",
+    "A medical root or combining form meaning prostate.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "salping/o",
+    "Root or combining form",
+    "A medical root or combining form meaning fallopian tube.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "vagin/o",
+    "Root or combining form",
+    "A medical root or combining form meaning vagina.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cervic/o",
+    "Root or combining form",
+    "A medical root or combining form meaning cervix or neck.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "amnion/o",
+    "Root or combining form",
+    "A medical root or combining form meaning amnion.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "fet/o",
+    "Root or combining form",
+    "A medical root or combining form meaning fetus.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "neur/o",
+    "Root or combining form",
+    "A medical root or combining form meaning nerve or nervous system.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "encephal/o",
+    "Root or combining form",
+    "A medical root or combining form meaning brain.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cerebr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning cerebrum.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cerebell/o",
+    "Root or combining form",
+    "A medical root or combining form meaning cerebellum.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "myel/o",
+    "Root or combining form",
+    "A medical root or combining form meaning bone marrow or spinal cord.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "mening/o",
+    "Root or combining form",
+    "A medical root or combining form meaning meninges.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "psych/o",
+    "Root or combining form",
+    "A medical root or combining form meaning mind.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "esthesi/o",
+    "Root or combining form",
+    "A medical root or combining form meaning sensation.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "gli/o",
+    "Root or combining form",
+    "A medical root or combining form meaning glial tissue.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "radicul/o",
+    "Root or combining form",
+    "A medical root or combining form meaning nerve root.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "oste/o",
+    "Root or combining form",
+    "A medical root or combining form meaning bone.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "arthr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning joint.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "my/o",
+    "Root or combining form",
+    "A medical root or combining form meaning muscle.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "ten/o",
+    "Root or combining form",
+    "A medical root or combining form meaning tendon.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "tendin/o",
+    "Root or combining form",
+    "A medical root or combining form meaning tendon.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "ligament/o",
+    "Root or combining form",
+    "A medical root or combining form meaning ligament.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "chondr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning cartilage.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "spondyl/o",
+    "Root or combining form",
+    "A medical root or combining form meaning vertebra.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cost/o",
+    "Root or combining form",
+    "A medical root or combining form meaning rib.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "derm/o",
+    "Root or combining form",
+    "A medical root or combining form meaning skin.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "dermat/o",
+    "Root or combining form",
+    "A medical root or combining form meaning skin.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cutane/o",
+    "Root or combining form",
+    "A medical root or combining form meaning skin.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "hidr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning sweat.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "seb/o",
+    "Root or combining form",
+    "A medical root or combining form meaning sebum.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "onych/o",
+    "Root or combining form",
+    "A medical root or combining form meaning nail.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "trich/o",
+    "Root or combining form",
+    "A medical root or combining form meaning hair.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "kerat/o",
+    "Root or combining form",
+    "A medical root or combining form meaning horny tissue; cornea.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "melan/o",
+    "Root or combining form",
+    "A medical root or combining form meaning black pigment.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "adip/o",
+    "Root or combining form",
+    "A medical root or combining form meaning fat.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "ophthalm/o",
+    "Root or combining form",
+    "A medical root or combining form meaning eye.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "ocul/o",
+    "Root or combining form",
+    "A medical root or combining form meaning eye.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "opt/o",
+    "Root or combining form",
+    "A medical root or combining form meaning vision.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "blephar/o",
+    "Root or combining form",
+    "A medical root or combining form meaning eyelid.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "conjunctiv/o",
+    "Root or combining form",
+    "A medical root or combining form meaning conjunctiva.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "ot/o",
+    "Root or combining form",
+    "A medical root or combining form meaning ear.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "audi/o",
+    "Root or combining form",
+    "A medical root or combining form meaning hearing.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "tympan/o",
+    "Root or combining form",
+    "A medical root or combining form meaning eardrum.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "vestibul/o",
+    "Root or combining form",
+    "A medical root or combining form meaning vestibule.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "mastoid/o",
+    "Root or combining form",
+    "A medical root or combining form meaning mastoid process.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "endocrin/o",
+    "Root or combining form",
+    "A medical root or combining form meaning endocrine glands.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "thyroid/o",
+    "Root or combining form",
+    "A medical root or combining form meaning thyroid gland.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "adren/o",
+    "Root or combining form",
+    "A medical root or combining form meaning adrenal gland.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "pituitar/o",
+    "Root or combining form",
+    "A medical root or combining form meaning pituitary gland.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "glyc/o",
+    "Root or combining form",
+    "A medical root or combining form meaning sugar.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "insulin/o",
+    "Root or combining form",
+    "A medical root or combining form meaning insulin.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "kal/i",
+    "Root or combining form",
+    "A medical root or combining form meaning potassium.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "natri/o",
+    "Root or combining form",
+    "A medical root or combining form meaning sodium.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "calc/i",
+    "Root or combining form",
+    "A medical root or combining form meaning calcium.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "home/o",
+    "Root or combining form",
+    "A medical root or combining form meaning same; stable.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "immun/o",
+    "Root or combining form",
+    "A medical root or combining form meaning immune system.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "lymph/o",
+    "Root or combining form",
+    "A medical root or combining form meaning lymph.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "splen/o",
+    "Root or combining form",
+    "A medical root or combining form meaning spleen.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "tonsill/o",
+    "Root or combining form",
+    "A medical root or combining form meaning tonsil.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "tox/o",
+    "Root or combining form",
+    "A medical root or combining form meaning poison.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "bacteri/o",
+    "Root or combining form",
+    "A medical root or combining form meaning bacteria.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "vir/o",
+    "Root or combining form",
+    "A medical root or combining form meaning virus.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "myc/o",
+    "Root or combining form",
+    "A medical root or combining form meaning fungus.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "seps/o",
+    "Root or combining form",
+    "A medical root or combining form meaning infection.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "path/o",
+    "Root or combining form",
+    "A medical root or combining form meaning disease.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cyt/o",
+    "Root or combining form",
+    "A medical root or combining form meaning cell.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "hist/o",
+    "Root or combining form",
+    "A medical root or combining form meaning tissue.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "bi/o",
+    "Root or combining form",
+    "A medical root or combining form meaning life.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "onc/o",
+    "Root or combining form",
+    "A medical root or combining form meaning tumor.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "carcin/o",
+    "Root or combining form",
+    "A medical root or combining form meaning cancer.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "sarc/o",
+    "Root or combining form",
+    "A medical root or combining form meaning flesh or connective tissue.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "aden/o",
+    "Root or combining form",
+    "A medical root or combining form meaning gland.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "lip/o",
+    "Root or combining form",
+    "A medical root or combining form meaning fat.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "hydr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning water.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "therm/o",
+    "Root or combining form",
+    "A medical root or combining form meaning heat.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "pharmac/o",
+    "Root or combining form",
+    "A medical root or combining form meaning drug or medicine.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "radi/o",
+    "Root or combining form",
+    "A medical root or combining form meaning radiation or x-ray.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "son/o",
+    "Root or combining form",
+    "A medical root or combining form meaning sound.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "ultrason/o",
+    "Root or combining form",
+    "A medical root or combining form meaning ultrasound.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "electr/o",
+    "Root or combining form",
+    "A medical root or combining form meaning electricity.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "lapar/o",
+    "Root or combining form",
+    "A medical root or combining form meaning abdomen.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "thorac/o",
+    "Root or combining form",
+    "A medical root or combining form meaning chest.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cranio/o",
+    "Root or combining form",
+    "A medical root or combining form meaning skull.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "cephal/o",
+    "Root or combining form",
+    "A medical root or combining form meaning head.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "somat/o",
+    "Root or combining form",
+    "A medical root or combining form meaning body.",
+    "Used in medical terminology, anatomy, procedures, diagnoses and clinical documentation.",
+    "Medical Terminology - Roots"
+  ],
+  [
+    "Anatomy",
+    "Full term",
+    "Study of body structures.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Physiology",
+    "Full term",
+    "Study of body functions.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Pathology",
+    "Full term",
+    "Study of disease and abnormal changes.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Homeostasis",
+    "Full term",
+    "Stable internal balance of the body.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Cell",
+    "Full term",
+    "Basic structural and functional unit of the body.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Tissue",
+    "Full term",
+    "Group of similar cells working together.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Organ",
+    "Full term",
+    "Body structure made of tissues with a specific function.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Organ System",
+    "Full term",
+    "Group of organs working together.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Anterior",
+    "Full term",
+    "Toward the front of the body.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Posterior",
+    "Full term",
+    "Toward the back of the body.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Superior",
+    "Full term",
+    "Above or toward the head.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Inferior",
+    "Full term",
+    "Below or toward the feet.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Medial",
+    "Full term",
+    "Toward the midline.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Lateral",
+    "Full term",
+    "Away from the midline.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Proximal",
+    "Full term",
+    "Closer to the point of attachment.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Distal",
+    "Full term",
+    "Farther from the point of attachment.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Superficial",
+    "Full term",
+    "Near the body surface.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Deep",
+    "Full term",
+    "Away from the body surface.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Sagittal Plane",
+    "Full term",
+    "Plane dividing the body into left and right parts.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Coronal Plane",
+    "Full term",
+    "Plane dividing the body into front and back parts.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Transverse Plane",
+    "Full term",
+    "Plane dividing the body into upper and lower parts.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Cardiovascular System",
+    "Full term",
+    "Heart and blood vessels.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Respiratory System",
+    "Full term",
+    "Organs involved in breathing and gas exchange.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Digestive System",
+    "Full term",
+    "Organs involved in food digestion and absorption.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Urinary System",
+    "Full term",
+    "Kidneys, ureters, bladder and urethra.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Nervous System",
+    "Full term",
+    "Brain, spinal cord and nerves.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Endocrine System",
+    "Full term",
+    "Hormone producing glands.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Musculoskeletal System",
+    "Full term",
+    "Bones, muscles, joints, tendons and ligaments.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Integumentary System",
+    "Full term",
+    "Skin, hair, nails and related glands.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Immune System",
+    "Full term",
+    "Defense system against infection and foreign material.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Lymphatic System",
+    "Full term",
+    "Lymph vessels, nodes and lymphoid organs.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Reproductive System",
+    "Full term",
+    "Organs involved in reproduction.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Cardiac Atrium",
+    "Full term",
+    "Upper chamber of the heart.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Cardiac Ventricle",
+    "Full term",
+    "Lower chamber of the heart.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Aorta",
+    "Full term",
+    "Main artery carrying blood from the heart.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Vena Cava",
+    "Full term",
+    "Large vein returning blood to the heart.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Capillary",
+    "Full term",
+    "Small vessel where exchange occurs.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Alveolus",
+    "Full term",
+    "Air sac in the lung for gas exchange.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Bronchus",
+    "Full term",
+    "Large airway entering the lungs.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Diaphragm",
+    "Full term",
+    "Major muscle used in breathing.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Esophagus",
+    "Full term",
+    "Tube carrying food to the stomach.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Stomach",
+    "Full term",
+    "Organ that stores and begins digestion of food.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Small Intestine",
+    "Full term",
+    "Digestive organ where absorption mainly occurs.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Large Intestine",
+    "Full term",
+    "Digestive organ that absorbs water and forms stool.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Liver",
+    "Full term",
+    "Organ involved in metabolism, bile production and detoxification.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Gallbladder",
+    "Full term",
+    "Organ that stores bile.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Pancreas",
+    "Full term",
+    "Organ that produces digestive enzymes and insulin.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Kidney",
+    "Full term",
+    "Organ that filters blood and produces urine.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Ureter",
+    "Full term",
+    "Tube carrying urine from kidney to bladder.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Bladder",
+    "Full term",
+    "Organ that stores urine.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Urethra",
+    "Full term",
+    "Tube carrying urine out of the body.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Cerebrum",
+    "Full term",
+    "Largest part of the brain.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Cerebellum",
+    "Full term",
+    "Brain region involved in coordination and balance.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Brainstem",
+    "Full term",
+    "Brain region controlling vital functions.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Spinal Cord",
+    "Full term",
+    "Nervous tissue carrying signals between brain and body.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Neuron",
+    "Full term",
+    "Nerve cell.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Synapse",
+    "Full term",
+    "Connection where nerve signals pass between cells.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Bone",
+    "Full term",
+    "Hard connective tissue of the skeleton.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Joint",
+    "Full term",
+    "Place where two bones meet.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Cartilage",
+    "Full term",
+    "Flexible connective tissue in joints and other structures.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Tendon",
+    "Full term",
+    "Connective tissue linking muscle to bone.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Ligament",
+    "Full term",
+    "Connective tissue linking bone to bone.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Epidermis",
+    "Full term",
+    "Outer layer of the skin.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Dermis",
+    "Full term",
+    "Inner layer of the skin.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Subcutaneous Tissue",
+    "Full term",
+    "Tissue layer under the skin.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Thyroid Gland",
+    "Full term",
+    "Endocrine gland in the neck.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Adrenal Gland",
+    "Full term",
+    "Endocrine gland above the kidney.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Pituitary Gland",
+    "Full term",
+    "Endocrine gland that regulates many hormones.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Spleen",
+    "Full term",
+    "Organ involved in immune function and blood filtration.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Lymph Node",
+    "Full term",
+    "Small immune structure that filters lymph.",
+    "Used in anatomy, medical terminology, clinical documentation, coding and student learning.",
+    "Anatomy & Body Systems"
+  ],
+  [
+    "Pain",
+    "Full term",
+    "Unpleasant sensory or emotional experience related to actual or potential tissue injury.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Fever",
+    "Full term",
+    "Body temperature above normal range.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Cough",
+    "Full term",
+    "Sudden expulsion of air from the lungs.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Dyspnea",
+    "Full term",
+    "Difficult or labored breathing.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Shortness of Breath",
+    "Full term",
+    "Feeling of not getting enough air.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Chest Pain",
+    "Full term",
+    "Pain or discomfort in the chest area.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Palpitation",
+    "Full term",
+    "Awareness of abnormal or forceful heartbeat.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Syncope",
+    "Full term",
+    "Temporary loss of consciousness due to reduced brain blood flow.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Dizziness",
+    "Full term",
+    "Feeling lightheaded, faint or unsteady.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Vertigo",
+    "Full term",
+    "Sensation that the person or surroundings are spinning.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Headache",
+    "Full term",
+    "Pain in the head.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Nausea",
+    "Full term",
+    "Feeling of needing to vomit.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Vomiting",
+    "Full term",
+    "Forceful expulsion of stomach contents.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Diarrhea",
+    "Full term",
+    "Frequent loose or watery stools.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Constipation",
+    "Full term",
+    "Difficult or infrequent bowel movements.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Dysphagia",
+    "Full term",
+    "Difficulty swallowing.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Heartburn",
+    "Full term",
+    "Burning sensation from gastric reflux.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Hematemesis",
+    "Full term",
+    "Vomiting blood.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Melena",
+    "Full term",
+    "Black tarry stool usually due to digested blood.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Hematochezia",
+    "Full term",
+    "Fresh blood in stool.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Hematuria",
+    "Full term",
+    "Blood in urine.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Dysuria",
+    "Full term",
+    "Painful or difficult urination.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Polyuria",
+    "Full term",
+    "Excessive urination.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Oliguria",
+    "Full term",
+    "Reduced urine output.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Anuria",
+    "Full term",
+    "Absence of urine output.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Edema",
+    "Full term",
+    "Swelling caused by fluid accumulation.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Cyanosis",
+    "Full term",
+    "Bluish discoloration due to reduced oxygenation.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Pallor",
+    "Full term",
+    "Unusual paleness.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Jaundice",
+    "Full term",
+    "Yellow discoloration due to bilirubin.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Rash",
+    "Full term",
+    "Visible skin eruption or irritation.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Pruritus",
+    "Full term",
+    "Itching.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Erythema",
+    "Full term",
+    "Redness of the skin.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Ulcer",
+    "Full term",
+    "Open sore or tissue defect.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Wound",
+    "Full term",
+    "Injury to tissue.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Bruise",
+    "Full term",
+    "Skin discoloration due to bleeding under the skin.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Laceration",
+    "Full term",
+    "Torn or cut wound.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Fracture",
+    "Full term",
+    "Break in a bone.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Sprain",
+    "Full term",
+    "Ligament injury from stretching or tearing.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Strain",
+    "Full term",
+    "Muscle or tendon injury.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Seizure",
+    "Full term",
+    "Episode of abnormal electrical activity in the brain.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Tremor",
+    "Full term",
+    "Involuntary rhythmic movement.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Weakness",
+    "Full term",
+    "Reduced muscle strength.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Paralysis",
+    "Full term",
+    "Loss of voluntary movement.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Numbness",
+    "Full term",
+    "Reduced or absent sensation.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Paresthesia",
+    "Full term",
+    "Abnormal tingling or prickling sensation.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Confusion",
+    "Full term",
+    "Reduced clarity of thought or awareness.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Delirium",
+    "Full term",
+    "Acute fluctuating disturbance of attention and cognition.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Fatigue",
+    "Full term",
+    "Persistent tiredness or lack of energy.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Malaise",
+    "Full term",
+    "General feeling of discomfort or illness.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Weight Loss",
+    "Full term",
+    "Decrease in body weight.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Weight Gain",
+    "Full term",
+    "Increase in body weight.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Anorexia",
+    "Full term",
+    "Loss of appetite.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Insomnia",
+    "Full term",
+    "Difficulty sleeping.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Somnolence",
+    "Full term",
+    "Excessive sleepiness.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Anxiety",
+    "Full term",
+    "Feeling of worry or fear.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Depression",
+    "Full term",
+    "Persistent low mood or loss of interest.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Tachycardia",
+    "Full term",
+    "Abnormally fast heart rate.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Bradycardia",
+    "Full term",
+    "Abnormally slow heart rate.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Hypertension",
+    "Full term",
+    "High blood pressure.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Hypotension",
+    "Full term",
+    "Low blood pressure.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Hypoxia",
+    "Full term",
+    "Low oxygen level in tissues.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Hyperglycemia",
+    "Full term",
+    "High blood glucose.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Hypoglycemia",
+    "Full term",
+    "Low blood glucose.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Dehydration",
+    "Full term",
+    "Deficit of body water.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Shock",
+    "Full term",
+    "Life-threatening condition with inadequate tissue perfusion.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Sepsis",
+    "Full term",
+    "Life-threatening organ dysfunction caused by infection.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Inflammation",
+    "Full term",
+    "Body response to injury or infection.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Infection",
+    "Full term",
+    "Invasion and multiplication of microorganisms.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Abscess",
+    "Full term",
+    "Localized collection of pus.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Mass",
+    "Full term",
+    "Abnormal lump or lesion.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Lesion",
+    "Full term",
+    "Abnormal tissue area.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Tenderness",
+    "Full term",
+    "Pain or discomfort when an area is touched.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Guarding",
+    "Full term",
+    "Tensing of muscles during examination.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Crepitus",
+    "Full term",
+    "Crackling or grating sensation.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Murmur",
+    "Full term",
+    "Abnormal heart sound.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Wheeze",
+    "Full term",
+    "High-pitched breathing sound.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Crackle",
+    "Full term",
+    "Abnormal lung sound often associated with fluid or secretions.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Rhonchi",
+    "Full term",
+    "Low-pitched coarse breath sounds.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Stridor",
+    "Full term",
+    "High-pitched airway sound usually from obstruction.",
+    "Used in history taking, clinical notes, triage, coding support and EMR documentation.",
+    "Signs, Symptoms & Clinical Findings"
+  ],
+  [
+    "Diabetes Mellitus",
+    "Full term",
+    "Chronic disorder with high blood glucose due to insulin problems.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Hypertension",
+    "Full term",
+    "Chronic high blood pressure.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Coronary Artery Disease",
+    "Full term",
+    "Narrowing of coronary arteries affecting heart blood flow.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Myocardial Infarction",
+    "Full term",
+    "Heart muscle injury caused by reduced blood supply.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Heart Failure",
+    "Full term",
+    "Condition in which the heart cannot pump blood effectively.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Arrhythmia",
+    "Full term",
+    "Abnormal heart rhythm.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Atrial Fibrillation",
+    "Full term",
+    "Irregular often rapid heart rhythm from the atria.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Stroke",
+    "Full term",
+    "Brain injury caused by interrupted blood flow or bleeding.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Transient Ischemic Attack",
+    "Full term",
+    "Temporary neurologic symptoms from brief reduced blood flow.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Pneumonia",
+    "Full term",
+    "Infection or inflammation of lung tissue.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Asthma",
+    "Full term",
+    "Chronic airway inflammation with reversible airflow limitation.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "COPD",
+    "Full term",
+    "Chronic obstructive pulmonary disease with persistent airflow limitation.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Tuberculosis",
+    "Full term",
+    "Infectious disease caused by Mycobacterium tuberculosis.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "COVID-19",
+    "Full term",
+    "Infectious disease caused by SARS-CoV-2.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Influenza",
+    "Full term",
+    "Viral respiratory infection.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Bronchitis",
+    "Full term",
+    "Inflammation of the bronchi.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Pulmonary Embolism",
+    "Full term",
+    "Blockage in pulmonary artery usually from a blood clot.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "GERD",
+    "Full term",
+    "Gastroesophageal reflux disease with stomach acid reflux.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Gastritis",
+    "Full term",
+    "Inflammation of the stomach lining.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Peptic Ulcer Disease",
+    "Full term",
+    "Ulcer in stomach or duodenum.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Appendicitis",
+    "Full term",
+    "Inflammation of the appendix.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Cholecystitis",
+    "Full term",
+    "Inflammation of the gallbladder.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Cholelithiasis",
+    "Full term",
+    "Gallstones.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Hepatitis",
+    "Full term",
+    "Inflammation of the liver.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Cirrhosis",
+    "Full term",
+    "Chronic liver scarring and dysfunction.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Pancreatitis",
+    "Full term",
+    "Inflammation of the pancreas.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Inflammatory Bowel Disease",
+    "Full term",
+    "Chronic intestinal inflammation such as Crohn disease or ulcerative colitis.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Crohn Disease",
+    "Full term",
+    "Chronic inflammatory bowel disease that can affect any GI tract segment.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Ulcerative Colitis",
+    "Full term",
+    "Chronic inflammation of the colon and rectum.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Acute Kidney Injury",
+    "Full term",
+    "Sudden decrease in kidney function.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Chronic Kidney Disease",
+    "Full term",
+    "Long-term decline in kidney function.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Urinary Tract Infection",
+    "Full term",
+    "Infection of the urinary tract.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Pyelonephritis",
+    "Full term",
+    "Kidney infection.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Nephrolithiasis",
+    "Full term",
+    "Kidney stones.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Anemia",
+    "Full term",
+    "Reduced red blood cells or hemoglobin.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Leukemia",
+    "Full term",
+    "Cancer of blood-forming tissues.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Lymphoma",
+    "Full term",
+    "Cancer of lymphatic tissue.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Thrombocytopenia",
+    "Full term",
+    "Low platelet count.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Deep Vein Thrombosis",
+    "Full term",
+    "Blood clot in a deep vein.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Hemophilia",
+    "Full term",
+    "Inherited bleeding disorder.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Osteoarthritis",
+    "Full term",
+    "Degenerative joint disease.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Rheumatoid Arthritis",
+    "Full term",
+    "Autoimmune inflammatory joint disease.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Osteoporosis",
+    "Full term",
+    "Reduced bone density and increased fracture risk.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Fracture",
+    "Full term",
+    "Break in bone continuity.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Scoliosis",
+    "Full term",
+    "Abnormal lateral curvature of the spine.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Migraine",
+    "Full term",
+    "Recurrent headache disorder with specific features.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Epilepsy",
+    "Full term",
+    "Neurologic disorder with recurrent seizures.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Meningitis",
+    "Full term",
+    "Inflammation of membranes around brain and spinal cord.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Encephalitis",
+    "Full term",
+    "Inflammation of the brain.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Parkinson Disease",
+    "Full term",
+    "Neurodegenerative disorder affecting movement.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Alzheimer Disease",
+    "Full term",
+    "Progressive neurodegenerative disorder affecting memory and cognition.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Multiple Sclerosis",
+    "Full term",
+    "Immune-mediated disease affecting central nervous system myelin.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Depression",
+    "Full term",
+    "Mood disorder with persistent sadness or loss of interest.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Anxiety Disorder",
+    "Full term",
+    "Disorder characterized by excessive fear or worry.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Schizophrenia",
+    "Full term",
+    "Psychiatric disorder with psychosis and functional impairment.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Hypothyroidism",
+    "Full term",
+    "Underactive thyroid gland.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Hyperthyroidism",
+    "Full term",
+    "Overactive thyroid gland.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Cushing Syndrome",
+    "Full term",
+    "Condition due to excess cortisol.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Addison Disease",
+    "Full term",
+    "Adrenal insufficiency.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Obesity",
+    "Full term",
+    "Excess body fat associated with health risk.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Dyslipidemia",
+    "Full term",
+    "Abnormal blood lipid levels.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Cancer",
+    "Full term",
+    "Group of diseases with uncontrolled abnormal cell growth.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Breast Cancer",
+    "Full term",
+    "Malignant tumor of breast tissue.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Lung Cancer",
+    "Full term",
+    "Malignant tumor arising in lung tissue.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Colorectal Cancer",
+    "Full term",
+    "Cancer of colon or rectum.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Prostate Cancer",
+    "Full term",
+    "Malignant tumor of prostate gland.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Skin Cancer",
+    "Full term",
+    "Malignant growth of skin cells.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Sepsis",
+    "Full term",
+    "Life-threatening organ dysfunction due to infection.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Cellulitis",
+    "Full term",
+    "Bacterial infection of skin and soft tissue.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Abscess",
+    "Full term",
+    "Localized collection of pus.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Allergic Rhinitis",
+    "Full term",
+    "Nasal inflammation from allergy.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Anaphylaxis",
+    "Full term",
+    "Severe life-threatening allergic reaction.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Dermatitis",
+    "Full term",
+    "Inflammation of the skin.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Psoriasis",
+    "Full term",
+    "Chronic immune-mediated skin disease.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Eczema",
+    "Full term",
+    "Inflammatory itchy skin condition.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Cataract",
+    "Full term",
+    "Clouding of the lens of the eye.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Glaucoma",
+    "Full term",
+    "Eye disease with optic nerve damage.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Otitis Media",
+    "Full term",
+    "Middle ear infection.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Sinusitis",
+    "Full term",
+    "Inflammation of the sinuses.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Pregnancy",
+    "Full term",
+    "State of carrying a developing fetus.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Ectopic Pregnancy",
+    "Full term",
+    "Pregnancy outside the uterine cavity.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Preeclampsia",
+    "Full term",
+    "Pregnancy complication with hypertension and organ involvement.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Endometriosis",
+    "Full term",
+    "Endometrial-like tissue outside the uterus.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Polycystic Ovary Syndrome",
+    "Full term",
+    "Endocrine disorder with ovulatory dysfunction and hyperandrogenism.",
+    "Used in diagnosis documentation, coding practice, case studies, EMR problem lists and clinical terminology learning.",
+    "Diseases & Conditions"
+  ],
+  [
+    "Physical Examination",
+    "Full term",
+    "Clinical assessment of the body.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Vital Signs Measurement",
+    "Full term",
+    "Measurement of temperature, pulse, respiration, blood pressure and oxygen saturation.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Venipuncture",
+    "Full term",
+    "Puncture of a vein to collect blood.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Biopsy",
+    "Full term",
+    "Removal of tissue for examination.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Incision",
+    "Full term",
+    "Surgical cut.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Excision",
+    "Full term",
+    "Surgical removal.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Suture",
+    "Full term",
+    "Stitch used to close tissue.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Dressing Change",
+    "Full term",
+    "Replacement of wound covering.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Debridement",
+    "Full term",
+    "Removal of dead or contaminated tissue.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Intubation",
+    "Full term",
+    "Placement of a tube into the airway.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Mechanical Ventilation",
+    "Full term",
+    "Machine support for breathing.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Oxygen Therapy",
+    "Full term",
+    "Administration of oxygen.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Nebulization",
+    "Full term",
+    "Delivery of medication as inhaled mist.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Catheterization",
+    "Full term",
+    "Insertion of a catheter.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Urinary Catheterization",
+    "Full term",
+    "Insertion of catheter into bladder.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "IV Cannulation",
+    "Full term",
+    "Insertion of cannula into a vein.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Blood Transfusion",
+    "Full term",
+    "Administration of blood products.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Dialysis",
+    "Full term",
+    "Removal of waste products when kidneys fail.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Hemodialysis",
+    "Full term",
+    "Dialysis using a machine and blood circuit.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Peritoneal Dialysis",
+    "Full term",
+    "Dialysis using peritoneal membrane.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Endoscopy",
+    "Full term",
+    "Internal examination using a scope.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Colonoscopy",
+    "Full term",
+    "Endoscopic examination of the colon.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Gastroscopy",
+    "Full term",
+    "Endoscopic examination of the stomach.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Bronchoscopy",
+    "Full term",
+    "Endoscopic examination of airways.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Cystoscopy",
+    "Full term",
+    "Endoscopic examination of the bladder.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Laparoscopy",
+    "Full term",
+    "Minimally invasive abdominal surgery using a scope.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Thoracentesis",
+    "Full term",
+    "Needle removal of fluid from pleural space.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Paracentesis",
+    "Full term",
+    "Needle removal of abdominal fluid.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Lumbar Puncture",
+    "Full term",
+    "Needle sampling of cerebrospinal fluid.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Arthrocentesis",
+    "Full term",
+    "Needle aspiration of joint fluid.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Appendectomy",
+    "Full term",
+    "Surgical removal of appendix.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Cholecystectomy",
+    "Full term",
+    "Surgical removal of gallbladder.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Hysterectomy",
+    "Full term",
+    "Surgical removal of uterus.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Mastectomy",
+    "Full term",
+    "Surgical removal of breast tissue.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Colectomy",
+    "Full term",
+    "Surgical removal of all or part of colon.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Gastrectomy",
+    "Full term",
+    "Surgical removal of all or part of stomach.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Nephrectomy",
+    "Full term",
+    "Surgical removal of kidney.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Splenectomy",
+    "Full term",
+    "Surgical removal of spleen.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Tonsillectomy",
+    "Full term",
+    "Surgical removal of tonsils.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Adenoidectomy",
+    "Full term",
+    "Surgical removal of adenoids.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Angioplasty",
+    "Full term",
+    "Procedure to widen a narrowed vessel.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Stent Placement",
+    "Full term",
+    "Insertion of device to keep vessel or duct open.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "CABG",
+    "Full term",
+    "Coronary artery bypass graft surgery.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Pacemaker Insertion",
+    "Full term",
+    "Placement of device to regulate heart rhythm.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Cardioversion",
+    "Full term",
+    "Restoration of heart rhythm using electricity or medication.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Defibrillation",
+    "Full term",
+    "Electrical shock for life-threatening arrhythmia.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Cesarean Section",
+    "Full term",
+    "Surgical delivery of baby through abdominal and uterine incision.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Normal Vaginal Delivery",
+    "Full term",
+    "Delivery of baby through birth canal.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Episiotomy",
+    "Full term",
+    "Surgical incision at vaginal opening during childbirth.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Dilation and Curettage",
+    "Full term",
+    "Dilation of cervix and scraping of uterine lining.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "ORIF",
+    "Full term",
+    "Open reduction and internal fixation of a fracture.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Arthroplasty",
+    "Full term",
+    "Surgical replacement or reconstruction of a joint.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Amputation",
+    "Full term",
+    "Removal of a limb or body part.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Skin Graft",
+    "Full term",
+    "Transplantation of skin.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Wound Closure",
+    "Full term",
+    "Closure of wound using sutures, staples or adhesives.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Anesthesia",
+    "Full term",
+    "Controlled loss of sensation or awareness.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "General Anesthesia",
+    "Full term",
+    "Anesthesia with unconsciousness.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Local Anesthesia",
+    "Full term",
+    "Anesthesia limited to a small area.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Regional Anesthesia",
+    "Full term",
+    "Anesthesia affecting a body region.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "Sedation",
+    "Full term",
+    "Medication-induced relaxation or reduced awareness.",
+    "Used in procedure documentation, operative reports, coding, consent forms and HIS orders.",
+    "Procedures & Surgery"
+  ],
+  [
+    "CBC",
+    "Complete Blood Count",
+    "A blood test measuring red cells, white cells, hemoglobin, hematocrit and platelets.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "WBC",
+    "White Blood Cell Count",
+    "A measure of white blood cells in blood.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "RBC",
+    "Red Blood Cell Count",
+    "A measure of red blood cells in blood.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Hemoglobin",
+    "Full term",
+    "Protein in red blood cells that carries oxygen.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Hematocrit",
+    "Full term",
+    "Percentage of blood volume occupied by red blood cells.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Platelet Count",
+    "Full term",
+    "Number of platelets involved in clotting.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "ESR",
+    "Erythrocyte Sedimentation Rate",
+    "A nonspecific marker of inflammation.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "CRP",
+    "C-Reactive Protein",
+    "A blood marker that can increase with inflammation or infection.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Blood Culture",
+    "Full term",
+    "Laboratory test used to detect microorganisms in blood.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Urinalysis",
+    "Full term",
+    "Examination of urine for physical, chemical and microscopic findings.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Electrolytes",
+    "Full term",
+    "Blood chemicals such as sodium, potassium and chloride.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Sodium",
+    "Full term",
+    "Major electrolyte involved in fluid and nerve function.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Potassium",
+    "Full term",
+    "Electrolyte important for heart and muscle function.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Creatinine",
+    "Full term",
+    "Blood marker commonly used to assess kidney function.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "BUN",
+    "Blood Urea Nitrogen",
+    "Blood test related to kidney function and protein metabolism.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "eGFR",
+    "Estimated Glomerular Filtration Rate",
+    "Calculated measure of kidney filtration function.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "LFT",
+    "Liver Function Test",
+    "Panel of blood tests related to liver function or injury.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "ALT",
+    "Alanine Aminotransferase",
+    "Enzyme measured in liver injury assessment.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "AST",
+    "Aspartate Aminotransferase",
+    "Enzyme measured in liver and muscle injury assessment.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "ALP",
+    "Alkaline Phosphatase",
+    "Enzyme related to bile ducts, liver or bone.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Bilirubin",
+    "Full term",
+    "Pigment measured in jaundice and liver disease.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Glucose",
+    "Full term",
+    "Blood sugar level.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "HbA1c",
+    "Hemoglobin A1c",
+    "Average blood glucose indicator over about 2-3 months.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Lipid Profile",
+    "Full term",
+    "Test panel measuring cholesterol and triglycerides.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Troponin",
+    "Full term",
+    "Cardiac marker used to assess heart muscle injury.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "BNP",
+    "B-type Natriuretic Peptide",
+    "Marker used in heart failure assessment.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "PT",
+    "Prothrombin Time",
+    "Blood clotting test.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "INR",
+    "International Normalized Ratio",
+    "Standardized measure related to prothrombin time.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "aPTT",
+    "Activated Partial Thromboplastin Time",
+    "Blood clotting test.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "D-dimer",
+    "Full term",
+    "Blood test related to clot breakdown.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "ABG",
+    "Arterial Blood Gas",
+    "Test measuring oxygen, carbon dioxide and acid-base status in arterial blood.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "ECG",
+    "Electrocardiogram",
+    "Recording of electrical activity of the heart.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "EEG",
+    "Electroencephalogram",
+    "Recording of electrical activity of the brain.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "EMG",
+    "Electromyography",
+    "Test measuring muscle electrical activity.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "X-ray",
+    "Full term",
+    "Imaging using radiation to view internal structures.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "CT Scan",
+    "Computed Tomography",
+    "Cross-sectional imaging using X-rays and computer processing.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "MRI",
+    "Magnetic Resonance Imaging",
+    "Imaging using magnetic fields and radio waves.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Ultrasound",
+    "Full term",
+    "Imaging using high-frequency sound waves.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Echocardiogram",
+    "Full term",
+    "Ultrasound examination of the heart.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Mammography",
+    "Full term",
+    "Breast imaging using X-rays.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Fluoroscopy",
+    "Full term",
+    "Real-time X-ray imaging.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Angiography",
+    "Full term",
+    "Imaging of blood vessels using contrast.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "PET Scan",
+    "Positron Emission Tomography",
+    "Functional imaging using radioactive tracers.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "SPECT",
+    "Single Photon Emission Computed Tomography",
+    "Nuclear medicine imaging technique.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Bone Scan",
+    "Full term",
+    "Nuclear imaging used to evaluate bone activity.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Culture and Sensitivity",
+    "Full term",
+    "Test identifying microorganisms and antibiotic susceptibility.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Biomarker",
+    "Full term",
+    "Measurable indicator of a biological process, condition or response.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Reference Range",
+    "Full term",
+    "Range of expected values for a laboratory test.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Critical Result",
+    "Full term",
+    "Test result requiring urgent attention or notification.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Specimen",
+    "Full term",
+    "Sample collected for laboratory analysis.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Sample Rejection",
+    "Full term",
+    "Laboratory refusal of a specimen because it is unsuitable for testing.",
+    "Used in lab orders, result review, EMR documentation, LIS, coding support and clinical data interpretation.",
+    "Diagnostics, Laboratory & Imaging"
+  ],
+  [
+    "Medication",
+    "Full term",
+    "Drug or substance used for prevention, diagnosis, treatment or symptom control.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Prescription",
+    "Full term",
+    "Order for medication or treatment.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Dose",
+    "Full term",
+    "Amount of medication given at one time.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Dosage",
+    "Full term",
+    "Amount, frequency and duration of medication use.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Route",
+    "Full term",
+    "Path by which medication is given.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Frequency",
+    "Full term",
+    "How often a medication is taken.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Indication",
+    "Full term",
+    "Reason for using a medication or treatment.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Contraindication",
+    "Full term",
+    "Condition where a treatment should not be used.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Adverse Drug Reaction",
+    "Full term",
+    "Harmful or unintended response to medication.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Side Effect",
+    "Full term",
+    "Secondary effect of a medication.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Drug Interaction",
+    "Full term",
+    "Effect of one drug being changed by another drug, food or substance.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Allergy",
+    "Full term",
+    "Immune response to a substance.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Anaphylaxis",
+    "Full term",
+    "Severe potentially life-threatening allergic reaction.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Medication Reconciliation",
+    "Full term",
+    "Process of comparing medication lists to prevent errors.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "eMAR",
+    "Electronic Medication Administration Record",
+    "Electronic Medication Administration Record.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Antibiotic",
+    "Full term",
+    "Medication used to treat bacterial infection.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Antiviral",
+    "Full term",
+    "Medication used to treat viral infection.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Antifungal",
+    "Full term",
+    "Medication used to treat fungal infection.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Analgesic",
+    "Full term",
+    "Medication used to relieve pain.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Antipyretic",
+    "Full term",
+    "Medication used to reduce fever.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Antihypertensive",
+    "Full term",
+    "Medication used to lower blood pressure.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Anticoagulant",
+    "Full term",
+    "Medication used to reduce blood clotting.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Antiplatelet",
+    "Full term",
+    "Medication that reduces platelet clotting activity.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Diuretic",
+    "Full term",
+    "Medication that increases urine production.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Insulin",
+    "Full term",
+    "Hormone medication used to manage diabetes.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Bronchodilator",
+    "Full term",
+    "Medication that opens airways.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Corticosteroid",
+    "Full term",
+    "Medication that reduces inflammation and immune response.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Antiemetic",
+    "Full term",
+    "Medication used to control nausea or vomiting.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Sedative",
+    "Full term",
+    "Medication that calms or induces sleepiness.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Opioid",
+    "Full term",
+    "Pain medication acting on opioid receptors.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "NSAID",
+    "Nonsteroidal Anti-Inflammatory Drug",
+    "Nonsteroidal Anti-Inflammatory Drug.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "PPI",
+    "Proton Pump Inhibitor",
+    "Proton Pump Inhibitor.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Vaccine",
+    "Full term",
+    "Biological product used to stimulate immunity.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "High Alert Medication",
+    "Full term",
+    "Medication with higher risk of causing significant harm if used incorrectly.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Controlled Substance",
+    "Full term",
+    "Drug regulated because of potential misuse or dependence.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Medication Error",
+    "Full term",
+    "Preventable event that may cause inappropriate medication use or harm.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Dispensing",
+    "Full term",
+    "Preparing and providing medication to a patient or unit.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Administration",
+    "Full term",
+    "Giving a medication to a patient.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "Pharmacovigilance",
+    "Full term",
+    "Monitoring and prevention of adverse effects of medicines.",
+    "Used in medication orders, pharmacy systems, patient safety checks, eMAR and clinical documentation.",
+    "Pharmacology & Medication Safety"
+  ],
+  [
+    "BP",
+    "Blood Pressure",
+    "Common healthcare abbreviation for Blood Pressure.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HR",
+    "Heart Rate",
+    "Common healthcare abbreviation for Heart Rate.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PR",
+    "Pulse Rate",
+    "Common healthcare abbreviation for Pulse Rate.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "RR",
+    "Respiratory Rate",
+    "Common healthcare abbreviation for Respiratory Rate.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Temp",
+    "Temperature",
+    "Common healthcare abbreviation for Temperature.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "SpO2",
+    "Peripheral Oxygen Saturation",
+    "Common healthcare abbreviation for Peripheral Oxygen Saturation.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "BMI",
+    "Body Mass Index",
+    "Common healthcare abbreviation for Body Mass Index.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "NPO",
+    "Nothing by Mouth",
+    "Common healthcare abbreviation for Nothing by Mouth.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PRN",
+    "As Needed",
+    "Common healthcare abbreviation for As Needed.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "STAT",
+    "Immediately",
+    "Common healthcare abbreviation for Immediately.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PO",
+    "By Mouth",
+    "Common healthcare abbreviation for By Mouth.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "IV",
+    "Intravenous",
+    "Common healthcare abbreviation for Intravenous.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "IM",
+    "Intramuscular",
+    "Common healthcare abbreviation for Intramuscular.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "SC",
+    "Subcutaneous",
+    "Common healthcare abbreviation for Subcutaneous.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "SL",
+    "Sublingual",
+    "Common healthcare abbreviation for Sublingual.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "OD",
+    "Once Daily or Right Eye depending on context",
+    "Common healthcare abbreviation for Once Daily or Right Eye depending on context.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "BD",
+    "Twice Daily",
+    "Common healthcare abbreviation for Twice Daily.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "BID",
+    "Twice Daily",
+    "Common healthcare abbreviation for Twice Daily.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "TID",
+    "Three Times Daily",
+    "Common healthcare abbreviation for Three Times Daily.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "QID",
+    "Four Times Daily",
+    "Common healthcare abbreviation for Four Times Daily.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "q4h",
+    "Every 4 Hours",
+    "Common healthcare abbreviation for Every 4 Hours.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "q6h",
+    "Every 6 Hours",
+    "Common healthcare abbreviation for Every 6 Hours.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HS",
+    "At Bedtime",
+    "Common healthcare abbreviation for At Bedtime.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "AC",
+    "Before Meals",
+    "Common healthcare abbreviation for Before Meals.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PC",
+    "After Meals",
+    "Common healthcare abbreviation for After Meals.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Dx",
+    "Diagnosis",
+    "Common healthcare abbreviation for Diagnosis.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Tx",
+    "Treatment",
+    "Common healthcare abbreviation for Treatment.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Hx",
+    "History",
+    "Common healthcare abbreviation for History.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PMH",
+    "Past Medical History",
+    "Common healthcare abbreviation for Past Medical History.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HPI",
+    "History of Present Illness",
+    "Common healthcare abbreviation for History of Present Illness.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CC",
+    "Chief Complaint",
+    "Common healthcare abbreviation for Chief Complaint.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ROS",
+    "Review of Systems",
+    "Common healthcare abbreviation for Review of Systems.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "SOAP",
+    "Subjective Objective Assessment Plan",
+    "Common healthcare abbreviation for Subjective Objective Assessment Plan.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "DNR",
+    "Do Not Resuscitate",
+    "Common healthcare abbreviation for Do Not Resuscitate.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CPR",
+    "Cardiopulmonary Resuscitation",
+    "Common healthcare abbreviation for Cardiopulmonary Resuscitation.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ER",
+    "Emergency Room",
+    "Common healthcare abbreviation for Emergency Room.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ED",
+    "Emergency Department",
+    "Common healthcare abbreviation for Emergency Department.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "OPD",
+    "Outpatient Department",
+    "Common healthcare abbreviation for Outpatient Department.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "IPD",
+    "Inpatient Department",
+    "Common healthcare abbreviation for Inpatient Department.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ICU",
+    "Intensive Care Unit",
+    "Common healthcare abbreviation for Intensive Care Unit.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "NICU",
+    "Neonatal Intensive Care Unit",
+    "Common healthcare abbreviation for Neonatal Intensive Care Unit.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PICU",
+    "Pediatric Intensive Care Unit",
+    "Common healthcare abbreviation for Pediatric Intensive Care Unit.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "OR",
+    "Operating Room",
+    "Common healthcare abbreviation for Operating Room.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "OT",
+    "Operating Theatre",
+    "Common healthcare abbreviation for Operating Theatre.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PACU",
+    "Post-Anesthesia Care Unit",
+    "Common healthcare abbreviation for Post-Anesthesia Care Unit.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "LOS",
+    "Length of Stay",
+    "Common healthcare abbreviation for Length of Stay.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "AMA",
+    "Against Medical Advice",
+    "Common healthcare abbreviation for Against Medical Advice.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "DOB",
+    "Date of Birth",
+    "Common healthcare abbreviation for Date of Birth.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "MRN",
+    "Medical Record Number",
+    "Common healthcare abbreviation for Medical Record Number.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "UHN",
+    "Unique Health Number",
+    "Common healthcare abbreviation for Unique Health Number.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "MPI",
+    "Master Patient Index",
+    "Common healthcare abbreviation for Master Patient Index.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ADT",
+    "Admission Discharge Transfer",
+    "Common healthcare abbreviation for Admission Discharge Transfer.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "EMR",
+    "Electronic Medical Record",
+    "Common healthcare abbreviation for Electronic Medical Record.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "EHR",
+    "Electronic Health Record",
+    "Common healthcare abbreviation for Electronic Health Record.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HIS",
+    "Hospital Information System",
+    "Common healthcare abbreviation for Hospital Information System.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "LIS",
+    "Laboratory Information System",
+    "Common healthcare abbreviation for Laboratory Information System.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "RIS",
+    "Radiology Information System",
+    "Common healthcare abbreviation for Radiology Information System.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PACS",
+    "Picture Archiving and Communication System",
+    "Common healthcare abbreviation for Picture Archiving and Communication System.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CPOE",
+    "Computerized Provider Order Entry",
+    "Common healthcare abbreviation for Computerized Provider Order Entry.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CDSS",
+    "Clinical Decision Support System",
+    "Common healthcare abbreviation for Clinical Decision Support System.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HIE",
+    "Health Information Exchange",
+    "Common healthcare abbreviation for Health Information Exchange.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PHI",
+    "Protected Health Information",
+    "Common healthcare abbreviation for Protected Health Information.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PII",
+    "Personally Identifiable Information",
+    "Common healthcare abbreviation for Personally Identifiable Information.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ROI",
+    "Release of Information",
+    "Common healthcare abbreviation for Release of Information.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HIPAA",
+    "Health Insurance Portability and Accountability Act",
+    "Common healthcare abbreviation for Health Insurance Portability and Accountability Act.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "GDPR",
+    "General Data Protection Regulation",
+    "Common healthcare abbreviation for General Data Protection Regulation.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ICD",
+    "International Classification of Diseases",
+    "Common healthcare abbreviation for International Classification of Diseases.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ICD-10-CM",
+    "International Classification of Diseases, 10th Revision, Clinical Modification",
+    "Common healthcare abbreviation for International Classification of Diseases, 10th Revision, Clinical Modification.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ICD-11",
+    "International Classification of Diseases, 11th Revision",
+    "Common healthcare abbreviation for International Classification of Diseases, 11th Revision.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CPT",
+    "Current Procedural Terminology",
+    "Common healthcare abbreviation for Current Procedural Terminology.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HCPCS",
+    "Healthcare Common Procedure Coding System",
+    "Common healthcare abbreviation for Healthcare Common Procedure Coding System.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "DRG",
+    "Diagnosis Related Group",
+    "Common healthcare abbreviation for Diagnosis Related Group.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "SNOMED CT",
+    "Systematized Nomenclature of Medicine Clinical Terms",
+    "Common healthcare abbreviation for Systematized Nomenclature of Medicine Clinical Terms.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "LOINC",
+    "Logical Observation Identifiers Names and Codes",
+    "Common healthcare abbreviation for Logical Observation Identifiers Names and Codes.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "FHIR",
+    "Fast Healthcare Interoperability Resources",
+    "Common healthcare abbreviation for Fast Healthcare Interoperability Resources.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HL7",
+    "Health Level Seven",
+    "Common healthcare abbreviation for Health Level Seven.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "DICOM",
+    "Digital Imaging and Communications in Medicine",
+    "Common healthcare abbreviation for Digital Imaging and Communications in Medicine.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "API",
+    "Application Programming Interface",
+    "Common healthcare abbreviation for Application Programming Interface.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "JSON",
+    "JavaScript Object Notation",
+    "Common healthcare abbreviation for JavaScript Object Notation.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "XML",
+    "Extensible Markup Language",
+    "Common healthcare abbreviation for Extensible Markup Language.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "REST",
+    "Representational State Transfer",
+    "Common healthcare abbreviation for Representational State Transfer.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "SaaS",
+    "Software as a Service",
+    "Common healthcare abbreviation for Software as a Service.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "SaMD",
+    "Software as a Medical Device",
+    "Common healthcare abbreviation for Software as a Medical Device.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "AI",
+    "Artificial Intelligence",
+    "Common healthcare abbreviation for Artificial Intelligence.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ML",
+    "Machine Learning",
+    "Common healthcare abbreviation for Machine Learning.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "NLP",
+    "Natural Language Processing",
+    "Common healthcare abbreviation for Natural Language Processing.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "RPM",
+    "Remote Patient Monitoring",
+    "Common healthcare abbreviation for Remote Patient Monitoring.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "IoMT",
+    "Internet of Medical Things",
+    "Common healthcare abbreviation for Internet of Medical Things.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CDR",
+    "Clinical Data Repository",
+    "Common healthcare abbreviation for Clinical Data Repository.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "EPR",
+    "Electronic Patient Record",
+    "Common healthcare abbreviation for Electronic Patient Record.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PHR",
+    "Personal Health Record",
+    "Common healthcare abbreviation for Personal Health Record.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CMS",
+    "Content Management System or Centers for Medicare & Medicaid Services depending on context",
+    "Common healthcare abbreviation for Content Management System or Centers for Medicare & Medicaid Services depending on context.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "KPI",
+    "Key Performance Indicator",
+    "Common healthcare abbreviation for Key Performance Indicator.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "QA",
+    "Quality Assurance",
+    "Common healthcare abbreviation for Quality Assurance.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "QI",
+    "Quality Improvement",
+    "Common healthcare abbreviation for Quality Improvement.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "TAT",
+    "Turnaround Time",
+    "Common healthcare abbreviation for Turnaround Time.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "SOP",
+    "Standard Operating Procedure",
+    "Common healthcare abbreviation for Standard Operating Procedure.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "MOU",
+    "Memorandum of Understanding",
+    "Common healthcare abbreviation for Memorandum of Understanding.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "IRB",
+    "Institutional Review Board",
+    "Common healthcare abbreviation for Institutional Review Board.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "RCA",
+    "Root Cause Analysis",
+    "Common healthcare abbreviation for Root Cause Analysis.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "FMEA",
+    "Failure Mode and Effects Analysis",
+    "Common healthcare abbreviation for Failure Mode and Effects Analysis.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "H&P",
+    "History and Physical Examination",
+    "Common healthcare abbreviation for History and Physical Examination.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "A/P",
+    "Assessment and Plan",
+    "Common healthcare abbreviation for Assessment and Plan.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "c/o",
+    "Complains of",
+    "Common healthcare abbreviation for Complains of.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "s/p",
+    "Status Post",
+    "Common healthcare abbreviation for Status Post.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "r/o",
+    "Rule Out",
+    "Common healthcare abbreviation for Rule Out.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "w/",
+    "With",
+    "Common healthcare abbreviation for With.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "w/o",
+    "Without",
+    "Common healthcare abbreviation for Without.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "NKDA",
+    "No Known Drug Allergies",
+    "Common healthcare abbreviation for No Known Drug Allergies.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "NKA",
+    "No Known Allergies",
+    "Common healthcare abbreviation for No Known Allergies.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "SOB",
+    "Shortness of Breath",
+    "Common healthcare abbreviation for Shortness of Breath.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "DOE",
+    "Dyspnea on Exertion",
+    "Common healthcare abbreviation for Dyspnea on Exertion.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "LOC",
+    "Level or Loss of Consciousness depending on context",
+    "Common healthcare abbreviation for Level or Loss of Consciousness depending on context.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "GCS",
+    "Glasgow Coma Scale",
+    "Common healthcare abbreviation for Glasgow Coma Scale.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CNS",
+    "Central Nervous System",
+    "Common healthcare abbreviation for Central Nervous System.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PNS",
+    "Peripheral Nervous System",
+    "Common healthcare abbreviation for Peripheral Nervous System.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CAD",
+    "Coronary Artery Disease",
+    "Common healthcare abbreviation for Coronary Artery Disease.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "MI",
+    "Myocardial Infarction",
+    "Common healthcare abbreviation for Myocardial Infarction.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CHF",
+    "Congestive Heart Failure",
+    "Common healthcare abbreviation for Congestive Heart Failure.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "AF",
+    "Atrial Fibrillation",
+    "Common healthcare abbreviation for Atrial Fibrillation.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "DVT",
+    "Deep Vein Thrombosis",
+    "Common healthcare abbreviation for Deep Vein Thrombosis.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PE",
+    "Pulmonary Embolism",
+    "Common healthcare abbreviation for Pulmonary Embolism.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CVA",
+    "Cerebrovascular Accident",
+    "Common healthcare abbreviation for Cerebrovascular Accident.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "TIA",
+    "Transient Ischemic Attack",
+    "Common healthcare abbreviation for Transient Ischemic Attack.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "COPD",
+    "Chronic Obstructive Pulmonary Disease",
+    "Common healthcare abbreviation for Chronic Obstructive Pulmonary Disease.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "URI",
+    "Upper Respiratory Infection",
+    "Common healthcare abbreviation for Upper Respiratory Infection.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "UTI",
+    "Urinary Tract Infection",
+    "Common healthcare abbreviation for Urinary Tract Infection.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CKD",
+    "Chronic Kidney Disease",
+    "Common healthcare abbreviation for Chronic Kidney Disease.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "AKI",
+    "Acute Kidney Injury",
+    "Common healthcare abbreviation for Acute Kidney Injury.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "DM",
+    "Diabetes Mellitus",
+    "Common healthcare abbreviation for Diabetes Mellitus.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HTN",
+    "Hypertension",
+    "Common healthcare abbreviation for Hypertension.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HLD",
+    "Hyperlipidemia",
+    "Common healthcare abbreviation for Hyperlipidemia.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "GERD",
+    "Gastroesophageal Reflux Disease",
+    "Common healthcare abbreviation for Gastroesophageal Reflux Disease.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "IBD",
+    "Inflammatory Bowel Disease",
+    "Common healthcare abbreviation for Inflammatory Bowel Disease.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "IBS",
+    "Irritable Bowel Syndrome",
+    "Common healthcare abbreviation for Irritable Bowel Syndrome.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CABG",
+    "Coronary Artery Bypass Graft",
+    "Common healthcare abbreviation for Coronary Artery Bypass Graft.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PCI",
+    "Percutaneous Coronary Intervention",
+    "Common healthcare abbreviation for Percutaneous Coronary Intervention.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CXR",
+    "Chest X-ray",
+    "Common healthcare abbreviation for Chest X-ray.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CT",
+    "Computed Tomography",
+    "Common healthcare abbreviation for Computed Tomography.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "MRI",
+    "Magnetic Resonance Imaging",
+    "Common healthcare abbreviation for Magnetic Resonance Imaging.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "US",
+    "Ultrasound",
+    "Common healthcare abbreviation for Ultrasound.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ECG",
+    "Electrocardiogram",
+    "Common healthcare abbreviation for Electrocardiogram.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "EKG",
+    "Electrocardiogram",
+    "Common healthcare abbreviation for Electrocardiogram.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "EEG",
+    "Electroencephalogram",
+    "Common healthcare abbreviation for Electroencephalogram.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ABG",
+    "Arterial Blood Gas",
+    "Common healthcare abbreviation for Arterial Blood Gas.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CBC",
+    "Complete Blood Count",
+    "Common healthcare abbreviation for Complete Blood Count.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "BMP",
+    "Basic Metabolic Panel",
+    "Common healthcare abbreviation for Basic Metabolic Panel.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CMP",
+    "Comprehensive Metabolic Panel",
+    "Common healthcare abbreviation for Comprehensive Metabolic Panel.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "LFT",
+    "Liver Function Test",
+    "Common healthcare abbreviation for Liver Function Test.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "HbA1c",
+    "Hemoglobin A1c",
+    "Common healthcare abbreviation for Hemoglobin A1c.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "INR",
+    "International Normalized Ratio",
+    "Common healthcare abbreviation for International Normalized Ratio.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "PT",
+    "Prothrombin Time",
+    "Common healthcare abbreviation for Prothrombin Time.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "aPTT",
+    "Activated Partial Thromboplastin Time",
+    "Common healthcare abbreviation for Activated Partial Thromboplastin Time.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "WBC",
+    "White Blood Cell",
+    "Common healthcare abbreviation for White Blood Cell.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "RBC",
+    "Red Blood Cell",
+    "Common healthcare abbreviation for Red Blood Cell.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Hgb",
+    "Hemoglobin",
+    "Common healthcare abbreviation for Hemoglobin.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Hct",
+    "Hematocrit",
+    "Common healthcare abbreviation for Hematocrit.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Plt",
+    "Platelet",
+    "Common healthcare abbreviation for Platelet.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "BUN",
+    "Blood Urea Nitrogen",
+    "Common healthcare abbreviation for Blood Urea Nitrogen.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Cr",
+    "Creatinine",
+    "Common healthcare abbreviation for Creatinine.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Na",
+    "Sodium",
+    "Common healthcare abbreviation for Sodium.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "K",
+    "Potassium",
+    "Common healthcare abbreviation for Potassium.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Cl",
+    "Chloride",
+    "Common healthcare abbreviation for Chloride.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Ca",
+    "Calcium",
+    "Common healthcare abbreviation for Calcium.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Mg",
+    "Magnesium",
+    "Common healthcare abbreviation for Magnesium.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ALT",
+    "Alanine Aminotransferase",
+    "Common healthcare abbreviation for Alanine Aminotransferase.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "AST",
+    "Aspartate Aminotransferase",
+    "Common healthcare abbreviation for Aspartate Aminotransferase.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ALP",
+    "Alkaline Phosphatase",
+    "Common healthcare abbreviation for Alkaline Phosphatase.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "ESR",
+    "Erythrocyte Sedimentation Rate",
+    "Common healthcare abbreviation for Erythrocyte Sedimentation Rate.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "CRP",
+    "C-Reactive Protein",
+    "Common healthcare abbreviation for C-Reactive Protein.",
+    "Used in clinical notes, HIS/EMR screens, orders, reports, coding and student terminology practice. Always interpret abbreviations by context and local policy.",
+    "Medical Abbreviations"
+  ],
+  [
+    "Medical Coding",
+    "Full term",
+    "Process of converting diagnoses, procedures and services into standardized codes.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Clinical Coding",
+    "Full term",
+    "Coding of clinical diagnoses and procedures from health records.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Diagnosis Code",
+    "Full term",
+    "Standard code representing a diagnosis or condition.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Procedure Code",
+    "Full term",
+    "Standard code representing a procedure or service.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Primary Diagnosis",
+    "Full term",
+    "Main diagnosis responsible for the encounter or admission.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Secondary Diagnosis",
+    "Full term",
+    "Additional condition affecting care, treatment or resource use.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Principal Diagnosis",
+    "Full term",
+    "Diagnosis chiefly responsible for admission after study.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Comorbidity",
+    "Full term",
+    "Additional disease existing with the main condition.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Complication",
+    "Full term",
+    "Condition arising during care or disease course.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Coding Accuracy",
+    "Full term",
+    "Degree to which assigned codes match documentation and guidelines.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Coding Compliance",
+    "Full term",
+    "Following official coding rules, policies and ethical requirements.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Coding Query",
+    "Full term",
+    "Clarification question to provider about unclear documentation.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Encoder",
+    "Full term",
+    "Software that assists with code selection.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Grouper",
+    "Full term",
+    "Software that groups coded data into categories such as DRGs.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "DRG",
+    "Diagnosis Related Group",
+    "Diagnosis Related Group used for grouping inpatient cases.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Case Mix",
+    "Full term",
+    "Distribution of patient types and resource needs.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Upcoding",
+    "Full term",
+    "Assigning codes that imply greater severity or payment than supported.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Downcoding",
+    "Full term",
+    "Assigning codes that understate the documented service or severity.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Unbundling",
+    "Full term",
+    "Separately coding services that should be reported together.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Morbidity Coding",
+    "Full term",
+    "Coding diseases and health conditions.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Mortality Coding",
+    "Full term",
+    "Coding causes of death.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "External Cause Code",
+    "Full term",
+    "Code describing cause, intent, place or activity related to injury.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Laterality",
+    "Full term",
+    "Side of body affected, such as left, right or bilateral.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Excludes Note",
+    "Full term",
+    "Coding instruction showing codes that should not be used together.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Inclusion Term",
+    "Full term",
+    "Example term listed under a code.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Code First",
+    "Full term",
+    "Instruction to code an underlying condition before another code.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Use Additional Code",
+    "Full term",
+    "Instruction to add another code for more detail.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Manifestation Code",
+    "Full term",
+    "Code describing a condition that results from an underlying disease.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Default Code",
+    "Full term",
+    "Code listed next to a main term when no further detail is available.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Tabular List",
+    "Full term",
+    "Structured list of codes arranged by chapters and categories.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Alphabetic Index",
+    "Full term",
+    "Index used to locate possible codes by terms.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Official Coding Guidelines",
+    "Full term",
+    "Rules for coding and reporting codes in a specific coding system.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Clinical Documentation Improvement",
+    "Full term",
+    "Process to improve completeness and clarity of clinical documentation.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Audit of Coding",
+    "Full term",
+    "Review of code assignment for accuracy and compliance.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Present on Admission",
+    "Full term",
+    "Indicator showing whether a condition was present at admission.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "ICD-10-CM",
+    "International Classification of Diseases, 10th Revision, Clinical Modification",
+    "Diagnosis coding modification of ICD-10.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "ICD-10-PCS",
+    "Full term",
+    "Procedure coding system used for inpatient procedures in some settings.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "ICD-11 MMS",
+    "Full term",
+    "ICD-11 Mortality and Morbidity Statistics.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "CPT",
+    "Current Procedural Terminology",
+    "Procedural terminology used for reporting medical procedures and services.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "HCPCS",
+    "Healthcare Common Procedure Coding System",
+    "Coding system for healthcare procedures, supplies and services.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "SNOMED CT",
+    "Systematized Nomenclature of Medicine Clinical Terms",
+    "Clinical terminology used to record clinical concepts.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "LOINC",
+    "Logical Observation Identifiers Names and Codes",
+    "Terminology for lab and clinical observations.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "RxNorm",
+    "Full term",
+    "Standardized drug naming vocabulary.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "UMLS",
+    "Full term",
+    "Unified Medical Language System that integrates biomedical vocabularies.",
+    "Used in coding classes, medical records departments, documentation review, billing workflows and health data reporting.",
+    "Medical Coding & Classification"
+  ],
+  [
+    "Digital Health",
+    "Full term",
+    "Use of digital technologies to improve health and healthcare.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "mHealth",
+    "Full term",
+    "Mobile health supported by mobile phones, apps, tablets or wearables.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Telehealth",
+    "Full term",
+    "Remote delivery of health services, education or monitoring.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Telemedicine",
+    "Full term",
+    "Remote clinical consultation and care using communication technology.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Remote Patient Monitoring",
+    "Full term",
+    "Collection of health data from patients outside healthcare facilities.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Wearable Device",
+    "Full term",
+    "Body-worn technology that collects health or activity data.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Smartwatch",
+    "Full term",
+    "Wearable device often used for activity or health monitoring.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Patient Portal",
+    "Full term",
+    "Online system for patients to access health information and services.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "e-Prescribing",
+    "Full term",
+    "Electronic creation and transmission of prescriptions.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Digital Therapeutics",
+    "Full term",
+    "Evidence-based software intervention used to prevent, manage or treat a condition.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Virtual Care",
+    "Full term",
+    "Healthcare delivered through digital communication channels.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Hybrid Care",
+    "Full term",
+    "Care model combining in-person and virtual services.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Connected Care",
+    "Full term",
+    "Healthcare supported by connected devices and information systems.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "IoMT",
+    "Internet of Medical Things",
+    "Network of connected medical devices and health technologies.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Clinical Decision Support",
+    "Full term",
+    "Digital support providing alerts, reminders or recommendations.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Mobile App",
+    "Full term",
+    "Software application used on a mobile device.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Health App",
+    "Full term",
+    "Mobile or web application designed for health-related use.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Patient Engagement Technology",
+    "Full term",
+    "Tools that help patients participate in their care.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Secure Messaging",
+    "Full term",
+    "Protected digital messaging between patient and care team.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Video Consultation",
+    "Full term",
+    "Clinical interaction through video communication.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Digital Front Door",
+    "Full term",
+    "Digital entry point for patient access to services.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Online Appointment Booking",
+    "Full term",
+    "Digital scheduling of healthcare appointments.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Electronic Consent",
+    "Full term",
+    "Consent captured and stored electronically.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Digital Intake Form",
+    "Full term",
+    "Electronic form completed before a visit.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Patient-Generated Health Data",
+    "Full term",
+    "Health data created or recorded by patients.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Medical Device",
+    "Full term",
+    "Instrument, apparatus or software intended for medical purposes.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Software as a Medical Device",
+    "Full term",
+    "Software intended for medical purposes without being part of hardware.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Clinical Software",
+    "Full term",
+    "Software used to support clinical tasks.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Medical Device Software",
+    "Full term",
+    "Software used in or as a medical device.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Clinical Validation",
+    "Full term",
+    "Process of showing a tool is clinically meaningful and appropriate.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Usability Testing",
+    "Full term",
+    "Evaluation of how easily users can use a system.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Human Factors",
+    "Full term",
+    "Study of user interaction, safety and workflow design.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Interoperability Testing",
+    "Full term",
+    "Testing whether systems exchange and use data correctly.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Cybersecurity",
+    "Full term",
+    "Protection of systems, networks and data from digital threats.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Cloud Computing",
+    "Full term",
+    "Delivery of computing services over the internet.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Edge Computing",
+    "Full term",
+    "Processing data near the source device.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Blockchain in Healthcare",
+    "Full term",
+    "Distributed ledger technology applied to health data use cases.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Digital Biomarker",
+    "Full term",
+    "Objective measurable digital indicator of biological or health status.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Sensor",
+    "Full term",
+    "Device that detects and measures physical or biological signals.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Medical Alarm",
+    "Full term",
+    "Alert generated by a medical device or system.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Device Integration",
+    "Full term",
+    "Connecting medical devices to information systems.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Bedside Monitor",
+    "Full term",
+    "Device monitoring vital signs at the bedside.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Infusion Pump",
+    "Full term",
+    "Device that delivers fluids or medication in controlled amounts.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Ventilator",
+    "Full term",
+    "Device supporting or controlling breathing.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Pulse Oximeter",
+    "Full term",
+    "Device measuring oxygen saturation.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Glucometer",
+    "Full term",
+    "Device measuring blood glucose.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Blood Pressure Monitor",
+    "Full term",
+    "Device measuring blood pressure.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "ECG Machine",
+    "Full term",
+    "Device recording heart electrical activity.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Ultrasound Machine",
+    "Full term",
+    "Device creating images with sound waves.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "CT Scanner",
+    "Full term",
+    "Machine producing cross-sectional X-ray images.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "MRI Scanner",
+    "Full term",
+    "Machine producing images using magnetic fields.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "PACS Workstation",
+    "Full term",
+    "Computer station used to view medical images.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Barcode Medication Administration",
+    "Full term",
+    "Medication safety process using barcode scanning.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "RFID",
+    "Full term",
+    "Radio-frequency identification technology for tracking items or people.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Clinical Dashboard",
+    "Full term",
+    "Visual display of clinical or operational metrics.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Quality Dashboard",
+    "Full term",
+    "Dashboard showing quality and safety indicators.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Population Health Platform",
+    "Full term",
+    "Technology used to manage health outcomes across groups.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Public Health Surveillance System",
+    "Full term",
+    "System used to monitor disease trends and outbreaks.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Contact Tracing App",
+    "Full term",
+    "App used to support identification of exposure contacts.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Digital Triage",
+    "Full term",
+    "Technology-supported prioritization of patient needs.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Symptom Checker",
+    "Full term",
+    "Tool that collects symptoms and suggests possible next steps.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Chatbot in Healthcare",
+    "Full term",
+    "Conversational tool used for health education, triage or support.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Patient Reminder System",
+    "Full term",
+    "Technology sending reminders for appointments or medication.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "eReferral",
+    "Full term",
+    "Electronic referral from one provider or service to another.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "eDischarge",
+    "Full term",
+    "Digital discharge communication and summary process.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Personal Health Record",
+    "Full term",
+    "Health record controlled or managed by the patient.",
+    "Used in digital health courses, medical technology, telehealth workflows, innovation projects and system design.",
+    "Digital Health & Medical Technology"
+  ],
+  [
+    "Hospital Information System",
+    "Full term",
+    "Integrated information system supporting hospital clinical, administrative and financial workflows.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Electronic Medical Record",
+    "Full term",
+    "Digital patient record within a healthcare organization.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Electronic Health Record",
+    "Full term",
+    "Digital record intended to support information sharing across settings.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Patient Registration Module",
+    "Full term",
+    "HIS module used to create and verify patient demographic records.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Master Patient Index",
+    "Full term",
+    "Central index used to uniquely identify patients.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Duplicate Patient Record",
+    "Full term",
+    "More than one record created for the same patient.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Patient Search",
+    "Full term",
+    "Function used to locate a patient record.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Patient Demographics",
+    "Full term",
+    "Patient identity and contact information.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Unique Patient Identifier",
+    "Full term",
+    "Identifier used to link the correct patient to the correct record.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Appointment Scheduling Module",
+    "Full term",
+    "Module used to book, cancel and manage appointments.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Queue Management",
+    "Full term",
+    "System for managing patient waiting order and service flow.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Check-in",
+    "Full term",
+    "Process of marking patient arrival.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Outpatient Module",
+    "Full term",
+    "Module supporting clinic visits and outpatient workflow.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Emergency Department Module",
+    "Full term",
+    "Module supporting emergency registration, triage and care.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Triage Module",
+    "Full term",
+    "Module used to prioritize patients by urgency.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "ADT Module",
+    "Full term",
+    "Admission, discharge and transfer module.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Admission Module",
+    "Full term",
+    "Module used to admit a patient to inpatient care.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Bed Management",
+    "Full term",
+    "Function used to assign, transfer and monitor beds.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Ward Management",
+    "Full term",
+    "Function supporting inpatient ward operations.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Transfer",
+    "Full term",
+    "Movement of patient between beds, wards or services.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Discharge Module",
+    "Full term",
+    "Module used to complete discharge process.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Discharge Summary",
+    "Full term",
+    "Document summarizing patient admission, diagnosis, treatment and follow-up.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Clinical Documentation Module",
+    "Full term",
+    "Module used for provider and nursing notes.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Problem List",
+    "Full term",
+    "List of active and past patient problems.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Allergy List",
+    "Full term",
+    "List of documented allergies and reactions.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Medication List",
+    "Full term",
+    "List of current or past medications.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Vital Signs Chart",
+    "Full term",
+    "Record of vital sign measurements.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Nursing Documentation",
+    "Full term",
+    "Nursing notes, care plans and assessments.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Progress Note",
+    "Full term",
+    "Ongoing clinical note documenting patient progress.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Doctor Order Entry",
+    "Full term",
+    "Electronic entry of clinical orders.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "CPOE Module",
+    "Full term",
+    "Module for electronic provider orders.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Order Set",
+    "Full term",
+    "Predefined group of orders for a condition or workflow.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Laboratory Information System",
+    "Full term",
+    "System supporting lab orders, specimen tracking and results.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Lab Order",
+    "Full term",
+    "Request for a laboratory test.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Specimen Tracking",
+    "Full term",
+    "Tracking samples from collection to result.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Result Validation",
+    "Full term",
+    "Process of approving or verifying test results.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Radiology Information System",
+    "Full term",
+    "System supporting imaging orders, scheduling and reports.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "PACS",
+    "Picture Archiving and Communication System",
+    "System used to store, retrieve and view medical images.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Radiology Report",
+    "Full term",
+    "Interpretation of an imaging study.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Pharmacy Information System",
+    "Full term",
+    "System supporting medication orders, dispensing and stock.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Medication Administration Record",
+    "Full term",
+    "Record of medications given to a patient.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "eMAR",
+    "Full term",
+    "Electronic Medication Administration Record.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Medication Reconciliation",
+    "Full term",
+    "Comparing medication lists to reduce discrepancies.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Blood Bank Module",
+    "Full term",
+    "Module managing blood products and transfusion workflow.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Operating Theatre Module",
+    "Full term",
+    "Module supporting surgical scheduling and theatre workflow.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Anesthesia Record",
+    "Full term",
+    "Record of anesthesia care.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "ICU Module",
+    "Full term",
+    "Module supporting intensive care documentation and monitoring.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Maternity Module",
+    "Full term",
+    "Module supporting pregnancy, delivery and newborn documentation.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Dental Module",
+    "Full term",
+    "Module supporting dental documentation and services.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Physiotherapy Module",
+    "Full term",
+    "Module supporting rehabilitation services.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Dietary Module",
+    "Full term",
+    "Module managing diet orders and nutrition workflows.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Billing Module",
+    "Full term",
+    "Module used to capture charges and payment status.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Insurance Module",
+    "Full term",
+    "Module managing payer, eligibility and claim information.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Claims Management",
+    "Full term",
+    "Process of preparing and tracking insurance claims.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Cashier Module",
+    "Full term",
+    "Module supporting payment collection.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Inventory Module",
+    "Full term",
+    "Module tracking supplies, stock and consumables.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Procurement Module",
+    "Full term",
+    "Module supporting purchase requests and orders.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Human Resources Module",
+    "Full term",
+    "Administrative module for staff data and scheduling.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Finance Module",
+    "Full term",
+    "Administrative module for accounting and financial reporting.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Medical Records Module",
+    "Full term",
+    "Module supporting filing, tracking, audit and release of records.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Chart Tracking",
+    "Full term",
+    "Tracking physical or electronic record movement.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Release of Information",
+    "Full term",
+    "Process of releasing patient information according to authorization and policy.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Consent Management",
+    "Full term",
+    "Capturing and managing patient consent.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Document Management System",
+    "Full term",
+    "System for storing and managing scanned or electronic documents.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Scanning Module",
+    "Full term",
+    "Module used to digitize paper records.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Indexing",
+    "Full term",
+    "Assigning metadata to documents for retrieval.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Form Builder",
+    "Full term",
+    "Tool used to design electronic forms.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Template",
+    "Full term",
+    "Predefined documentation structure.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Clinical Pathway",
+    "Full term",
+    "Structured care plan for a condition or process.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Referral Module",
+    "Full term",
+    "Module managing referrals between services.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Patient Portal Module",
+    "Full term",
+    "Patient-facing access to appointments, results and messages.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Telehealth Module",
+    "Full term",
+    "Module supporting virtual visits and remote care.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Remote Monitoring Module",
+    "Full term",
+    "Module receiving data from home or wearable devices.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Reporting Module",
+    "Full term",
+    "Module generating operational and clinical reports.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Analytics Dashboard",
+    "Full term",
+    "Visual summary of indicators and performance metrics.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Data Warehouse",
+    "Full term",
+    "Central repository for analysis and reporting data.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Audit Log",
+    "Full term",
+    "System record of user activity.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "User Management",
+    "Full term",
+    "Function for creating users and assigning roles.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Access Control",
+    "Full term",
+    "Security function controlling who can see or modify data.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Role-Based Access Control",
+    "Full term",
+    "Access based on job role and responsibility.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "System Downtime",
+    "Full term",
+    "Period when the system is unavailable.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Downtime Procedure",
+    "Full term",
+    "Manual or alternative workflow used during system outage.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Backup",
+    "Full term",
+    "Copy of data used for recovery.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Disaster Recovery",
+    "Full term",
+    "Process to restore systems after disruption.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Interface Engine",
+    "Full term",
+    "Software managing data exchange between systems.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Master Data",
+    "Full term",
+    "Core reference data used across systems.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Dropdown List",
+    "Full term",
+    "Controlled list of values in a form or system.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Data Migration",
+    "Full term",
+    "Moving data from one system to another.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Data Mapping",
+    "Full term",
+    "Matching data fields between systems.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "System Configuration",
+    "Full term",
+    "Setting up system options and workflows.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "User Acceptance Testing",
+    "Full term",
+    "Testing by end users before system go-live.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Go-Live",
+    "Full term",
+    "Launch of a new system for real use.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Change Request",
+    "Full term",
+    "Formal request to modify system function.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Help Desk Ticket",
+    "Full term",
+    "Request for support or issue resolution.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Training Environment",
+    "Full term",
+    "Safe system environment for practice and learning.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Production Environment",
+    "Full term",
+    "Live operational system used for real patient data.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Sandbox Environment",
+    "Full term",
+    "Testing environment separated from live systems.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Clinical Workflow",
+    "Full term",
+    "Sequence of clinical tasks and information flow.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Patient Journey",
+    "Full term",
+    "End-to-end patient process across services.",
+    "Used in HIS simulation, EMR training, hospital workflow, health information management and system implementation.",
+    "HIS, EMR & Hospital Workflow"
+  ],
+  [
+    "Interoperability",
+    "Full term",
+    "Ability of systems to exchange, interpret and use information.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Semantic Interoperability",
+    "Full term",
+    "Ability to preserve meaning of exchanged information.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Syntactic Interoperability",
+    "Full term",
+    "Ability to exchange data using compatible formats.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Organizational Interoperability",
+    "Full term",
+    "Alignment of policies, workflows and responsibilities for information exchange.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Technical Interoperability",
+    "Full term",
+    "Technical connectivity between systems.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "HL7",
+    "Health Level Seven",
+    "Family of standards for healthcare information exchange.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "HL7 v2",
+    "Full term",
+    "Messaging standard widely used for healthcare interfaces.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "HL7 CDA",
+    "Full term",
+    "Clinical Document Architecture for structured clinical documents.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "FHIR",
+    "Fast Healthcare Interoperability Resources",
+    "Fast Healthcare Interoperability Resources standard.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "FHIR Resource",
+    "Full term",
+    "Building block of FHIR data such as Patient, Observation or Medication.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "FHIR Profile",
+    "Full term",
+    "Constraints and rules applied to a FHIR resource.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "FHIR Bundle",
+    "Full term",
+    "Collection of FHIR resources transmitted together.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "SMART on FHIR",
+    "Full term",
+    "App launch framework using FHIR and authorization standards.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "API",
+    "Application Programming Interface",
+    "Interface allowing systems or apps to communicate.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "REST API",
+    "Full term",
+    "API style using standard web methods.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "JSON",
+    "JavaScript Object Notation",
+    "Lightweight data format commonly used in APIs.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "XML",
+    "Extensible Markup Language",
+    "Markup language used for structured data exchange.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "OAuth 2.0",
+    "Full term",
+    "Authorization framework used to grant access.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "OpenID Connect",
+    "Full term",
+    "Identity layer built on OAuth 2.0.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "DICOM",
+    "Digital Imaging and Communications in Medicine",
+    "Standard for medical imaging data and communication.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "DICOMweb",
+    "Full term",
+    "Web-based services for DICOM data.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "IHE",
+    "Full term",
+    "Integrating the Healthcare Enterprise profiles for interoperability.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "XDS",
+    "Full term",
+    "Cross-Enterprise Document Sharing profile.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "HIE",
+    "Health Information Exchange",
+    "Health Information Exchange.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Health Information Exchange Organization",
+    "Full term",
+    "Organization enabling exchange of health information.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Terminology Server",
+    "Full term",
+    "Server providing terminology lookup, validation and mapping.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Value Set",
+    "Full term",
+    "Defined group of codes used for a specific purpose.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Code System",
+    "Full term",
+    "Organized set of codes and meanings.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Concept Map",
+    "Full term",
+    "Mapping between concepts in different code systems.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Data Standard",
+    "Full term",
+    "Agreed rule for representing data.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Information Model",
+    "Full term",
+    "Structure defining data elements and relationships.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Reference Model",
+    "Full term",
+    "General model underlying a data standard.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Archetype",
+    "Full term",
+    "Reusable clinical information model.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "openEHR",
+    "Full term",
+    "Open specification for electronic health record architecture.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "ISO 13606",
+    "Full term",
+    "Standard for EHR communication.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "USCDI",
+    "Full term",
+    "United States Core Data for Interoperability.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Core Data Set",
+    "Full term",
+    "Minimum agreed set of data elements.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Clinical Document",
+    "Full term",
+    "Structured or unstructured document describing care.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Observation",
+    "Full term",
+    "Measured or observed health data item.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Patient Resource",
+    "Full term",
+    "FHIR resource representing patient demographic information.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Encounter Resource",
+    "Full term",
+    "FHIR resource representing a healthcare encounter.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Medication Resource",
+    "Full term",
+    "FHIR resource representing medication information.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Procedure Resource",
+    "Full term",
+    "FHIR resource representing a performed or planned procedure.",
+    "Used in interoperability lessons, HIS interfaces, EHR integration, APIs and standards-based digital health projects.",
+    "Interoperability & Standards"
+  ],
+  [
+    "Confidentiality",
+    "Full term",
+    "Obligation to protect patient information from unauthorized disclosure.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Privacy",
+    "Full term",
+    "Patient right to control access to personal health information.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Security",
+    "Full term",
+    "Protection of information systems and data from threats.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Data Protection",
+    "Full term",
+    "Legal and organizational safeguards for personal data.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Informed Consent",
+    "Full term",
+    "Agreement after receiving adequate information.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Authorization",
+    "Full term",
+    "Permission to use or disclose information.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Authentication",
+    "Full term",
+    "Verifying identity of a user or system.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Authorization Control",
+    "Full term",
+    "Determining what an authenticated user can access.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Access Control",
+    "Full term",
+    "Policies and tools controlling access to data.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Minimum Necessary Principle",
+    "Full term",
+    "Using or sharing only the information needed.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Need to Know",
+    "Full term",
+    "Access limited to information required for job duties.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Breach",
+    "Full term",
+    "Unauthorized access, use or disclosure of information.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Incident Response",
+    "Full term",
+    "Process for handling security or privacy incidents.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Audit Trail",
+    "Full term",
+    "Record of system activity for accountability.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Audit Log Review",
+    "Full term",
+    "Checking logs for inappropriate access or activity.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Encryption",
+    "Full term",
+    "Converting data into unreadable form without a key.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "De-identification",
+    "Full term",
+    "Removing identifiers from data.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Anonymization",
+    "Full term",
+    "Processing data so individuals cannot reasonably be identified.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Pseudonymization",
+    "Full term",
+    "Replacing identifiers with codes while retaining a link.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Data Retention",
+    "Full term",
+    "Keeping records for a required period.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Record Destruction",
+    "Full term",
+    "Secure disposal of records after retention requirements.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Legal Health Record",
+    "Full term",
+    "Official business record of care.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Designated Record Set",
+    "Full term",
+    "Set of records used to make decisions about a patient.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Patient Rights",
+    "Full term",
+    "Rights such as access, amendment and privacy of information.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Access Request",
+    "Full term",
+    "Patient request to view or obtain health information.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Amendment Request",
+    "Full term",
+    "Request to correct or add information in a record.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Disclosure",
+    "Full term",
+    "Release or sharing of information.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Secondary Use of Data",
+    "Full term",
+    "Use of health data for purposes beyond direct care.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Research Ethics",
+    "Full term",
+    "Principles protecting participants in research.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Ethics Approval",
+    "Full term",
+    "Approval by an ethics committee or review board.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "IRB",
+    "Institutional Review Board",
+    "Institutional Review Board.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Data Use Agreement",
+    "Full term",
+    "Agreement defining permitted data use and safeguards.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Business Associate",
+    "Full term",
+    "External party handling protected health information for a covered entity.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "HIPAA",
+    "Health Insurance Portability and Accountability Act",
+    "US law with privacy and security rules for health information.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "GDPR",
+    "General Data Protection Regulation",
+    "European data protection regulation.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "PDPA",
+    "Full term",
+    "Personal Data Protection Act in some jurisdictions.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Telehealth Consent",
+    "Full term",
+    "Consent specific to remote care.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "AI Ethics",
+    "Full term",
+    "Ethical principles for design and use of AI systems.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Algorithmic Bias",
+    "Full term",
+    "Systematic unfairness in algorithm output.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Transparency",
+    "Full term",
+    "Clarity about data use, system function and decision support.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Accountability",
+    "Full term",
+    "Responsibility for actions, decisions and system outcomes.",
+    "Used in health technology law, privacy training, HIS access control, research, telehealth and data governance.",
+    "Privacy, Law & Ethics"
+  ],
+  [
+    "Health Data",
+    "Full term",
+    "Data related to health, healthcare or wellbeing.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Clinical Data",
+    "Full term",
+    "Data created during patient care.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Administrative Data",
+    "Full term",
+    "Operational or billing data used in healthcare administration.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Claims Data",
+    "Full term",
+    "Data submitted for payment or insurance claims.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Structured Data",
+    "Full term",
+    "Data captured in organized fields.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Unstructured Data",
+    "Full term",
+    "Free-text or non-tabular data such as notes and reports.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Quality",
+    "Full term",
+    "Fitness of data for its intended use.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Accuracy",
+    "Full term",
+    "Correctness of data values.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Completeness",
+    "Full term",
+    "Presence of all required data.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Timeliness",
+    "Full term",
+    "Availability of data when needed.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Consistency",
+    "Full term",
+    "Uniformity of data across records and systems.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Validity",
+    "Full term",
+    "Conformance of data to rules or accepted values.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Uniqueness",
+    "Full term",
+    "Absence of duplicate records.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Integrity",
+    "Full term",
+    "Trustworthiness and reliability of data across its lifecycle.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Lineage",
+    "Full term",
+    "History of data origin, movement and transformation.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Metadata",
+    "Full term",
+    "Data describing data.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Dictionary",
+    "Full term",
+    "Reference listing data elements and definitions.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Element",
+    "Full term",
+    "Specific field or item of data.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Dataset",
+    "Full term",
+    "Collection of related data.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Cleaning",
+    "Full term",
+    "Correcting or removing inaccurate, incomplete or duplicate data.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Validation",
+    "Full term",
+    "Checking whether data meets rules or expected format.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Normalization",
+    "Full term",
+    "Organizing data into consistent structure or scale.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Mapping",
+    "Full term",
+    "Matching fields or concepts between systems.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "ETL",
+    "Full term",
+    "Extract Transform Load process.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Warehouse",
+    "Full term",
+    "Central repository for reporting and analytics.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Clinical Data Repository",
+    "Full term",
+    "Repository containing clinical information.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Dashboard",
+    "Full term",
+    "Visual display of key information.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "KPI",
+    "Key Performance Indicator",
+    "Key Performance Indicator.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Indicator",
+    "Full term",
+    "Measure used to monitor performance or health status.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Denominator",
+    "Full term",
+    "Bottom number in a rate or ratio.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Numerator",
+    "Full term",
+    "Top number in a rate or ratio.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Rate",
+    "Full term",
+    "Measure showing frequency in a defined population.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Prevalence",
+    "Full term",
+    "Proportion of a population with a condition.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Incidence",
+    "Full term",
+    "New cases occurring over time.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Sensitivity",
+    "Full term",
+    "Ability of a test to correctly identify people with a condition.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Specificity",
+    "Full term",
+    "Ability of a test to correctly identify people without a condition.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Positive Predictive Value",
+    "Full term",
+    "Probability that a positive test indicates true disease.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Negative Predictive Value",
+    "Full term",
+    "Probability that a negative test indicates absence of disease.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Artificial Intelligence",
+    "Full term",
+    "Computer methods performing tasks that normally require human intelligence.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Machine Learning",
+    "Full term",
+    "AI methods that learn patterns from data.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Deep Learning",
+    "Full term",
+    "Machine learning using multi-layer neural networks.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Natural Language Processing",
+    "Full term",
+    "AI methods for processing human language.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Clinical NLP",
+    "Full term",
+    "NLP applied to clinical text.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Computer Vision",
+    "Full term",
+    "AI methods for interpreting images.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Predictive Analytics",
+    "Full term",
+    "Use of data to predict future events.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Risk Score",
+    "Full term",
+    "Numerical estimate of risk.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Algorithm",
+    "Full term",
+    "Step-by-step computational method.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Model",
+    "Full term",
+    "Computational representation trained or designed for a task.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Training Data",
+    "Full term",
+    "Data used to develop a model.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Validation Data",
+    "Full term",
+    "Data used to tune or evaluate model performance.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Test Data",
+    "Full term",
+    "Data used to assess final model performance.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Annotation",
+    "Full term",
+    "Labeling data for training or analysis.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Data Labeling",
+    "Full term",
+    "Assigning labels to data items.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Ground Truth",
+    "Full term",
+    "Reference answer used for evaluation.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Bias",
+    "Full term",
+    "Systematic error or unfairness.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Explainability",
+    "Full term",
+    "Ability to understand why a model produced an output.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Hallucination",
+    "Full term",
+    "AI output that is fluent but false or unsupported.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Human in the Loop",
+    "Full term",
+    "Human involvement in reviewing or guiding system output.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Clinical Validation",
+    "Full term",
+    "Evaluation of whether a model is clinically meaningful.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Model Monitoring",
+    "Full term",
+    "Ongoing tracking of model performance.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Drift",
+    "Full term",
+    "Change in data or model performance over time.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ],
+  [
+    "Responsible AI",
+    "Full term",
+    "AI designed and used safely, ethically and transparently.",
+    "Used in healthcare data analysis, digital health research, dashboards, quality improvement and AI review workflows.",
+    "Healthcare Data, Analytics & AI"
+  ]
+];
+
+  const privacyScenarios = [
+    {q:'A student sends a screenshot of a patient record to a class WhatsApp group for discussion.', a:'This is a confidentiality and privacy risk because identifiable patient information is shared without authorization.'},
+    {q:'A nurse documents telehealth consent before starting a virtual follow-up visit.', a:'This is good practice because telehealth documentation should include identity confirmation and consent.'},
+    {q:'A staff member uses another employee’s login to access the HIS.', a:'This is unsafe because it breaks accountability, audit trail accuracy and access control principles.'}
+  ];
+
+  function stateKey(){ const u=getActiveUser(); return u ? `dh_his_lab_state_${u.username}` : 'dh_his_lab_state_guest'; }
+  function loadState(){
+    try { return {...structuredClone(defaultState), ...(JSON.parse(localStorage.getItem(stateKey())) || {})}; }
+    catch(e){ return structuredClone(defaultState); }
+  }
+  function saveState(){ localStorage.setItem(stateKey(), JSON.stringify(state)); }
+  function getUsers(){
+    try { return JSON.parse(localStorage.getItem('dh_his_lab_users') || '[]'); }
+    catch(e){ return []; }
+  }
+  function setUsers(users){ localStorage.setItem('dh_his_lab_users', JSON.stringify(users)); }
+  function getActiveUser(){
+    try { return JSON.parse(localStorage.getItem('dh_his_lab_active_user') || 'null'); }
+    catch(e){ return null; }
+  }
+  function setActiveUser(user){ localStorage.setItem('dh_his_lab_active_user', JSON.stringify(user)); }
+  function clearActiveUser(){ localStorage.removeItem('dh_his_lab_active_user'); }
+  async function hashPassword(password, salt){
+    const raw = `${salt}:${password}`;
+    if(window.crypto && crypto.subtle){
+      const enc = new TextEncoder();
+      const data = enc.encode(raw);
+      const digest = await crypto.subtle.digest('SHA-256', data);
+      return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+    let h=0; for(let i=0;i<raw.length;i++){ h=((h<<5)-h)+raw.charCodeAt(i); h|=0; }
+    return `fallback-${Math.abs(h)}`;
+  }
+  function makeSalt(){ if(window.crypto && crypto.getRandomValues){ return crypto.getRandomValues(new Uint32Array(4)).join('-'); } return `${Date.now()}-${Math.random()}`; }
+  function $(id){return document.getElementById(id)}
+  function html(strings,...values){ return strings.map((s,i)=>s+(values[i]??'')).join(''); }
+
+  function updateAuthVisibility(){
+    const user = getActiveUser();
+    $('authScreen')?.classList.toggle('hidden', !!user);
+    $('appShell')?.classList.toggle('hidden', !user);
+    if(user){
+      const initials = (user.name || user.username || 'U').split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();
+      if($('profileName')) $('profileName').textContent = user.name || user.username;
+      if($('profileRole')) $('profileRole').textContent = user.role || 'Student';
+      const av = document.querySelector('.avatar'); if(av) av.textContent = initials;
+    }
+  }
+
+  function setAuthMode(mode){
+    const login = mode === 'login';
+    const recovery = mode === 'recovery';
+    $('loginForm')?.classList.toggle('hidden', !login);
+    $('registerForm')?.classList.toggle('hidden', login || recovery);
+    $('recoveryForm')?.classList.toggle('hidden', !recovery);
+    $('loginTab')?.classList.toggle('active', login);
+    $('registerTab')?.classList.toggle('active', !login && !recovery);
+  }
+
+  function initAuth(){
+    $('loginTab')?.addEventListener('click',()=>setAuthMode('login'));
+    $('registerTab')?.addEventListener('click',()=>setAuthMode('register'));
+    $('forgotAuth')?.addEventListener('click',()=>setAuthMode('recovery'));
+    $('backToLogin')?.addEventListener('click',()=>setAuthMode('login'));
+    $('recoveryForm')?.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const email=($('recoveryEmail')?.value || '').trim().toLowerCase();
+      const username=($('recoveryUsername')?.value || '').trim().toLowerCase();
+      const newPassword=$('recoveryPassword')?.value || '';
+      const users=getUsers();
+      const matchedByEmail=users.filter(u=>(u.email||'').toLowerCase()===email);
+      if(!email) return showToast('Please enter the email used during account creation.');
+      if(!username && !newPassword){
+        if(!matchedByEmail.length) return showToast('No local account found with this email.');
+        const names=matchedByEmail.map(u=>u.username).join(', ');
+        if($('recoveryResult')) $('recoveryResult').innerHTML=`<strong>Username recovery:</strong> ${escapeHtml(names)}<br><small>For privacy, passwords are not shown. To reset a password, enter username and new password below.</small>`;
+        return showToast('Username found for this browser.');
+      }
+      if(!username || newPassword.length<6) return showToast('To reset password, enter username and a new password with at least 6 characters.');
+      const idx=users.findIndex(u=>u.username===username && (u.email||'').toLowerCase()===email);
+      if(idx<0) return showToast('Username and email do not match any local account.');
+      const salt=makeSalt();
+      users[idx].salt=salt;
+      users[idx].passwordHash=await hashPassword(newPassword, salt);
+      users[idx].passwordUpdatedAt=new Date().toISOString();
+      setUsers(users);
+      if($('recoveryResult')) $('recoveryResult').innerHTML='<strong>Password reset successful.</strong><br><small>You can now return to login and use your new password.</small>';
+      showToast('Password reset successful.');
+    });
+    $('registerForm')?.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const name=$('registerName').value.trim();
+      const email=$('registerEmail').value.trim();
+      const role=$('registerRole').value;
+      const username=$('registerUsername').value.trim().toLowerCase();
+      const password=$('registerPassword').value;
+      if(!name || !email || !username || password.length<6) return showToast('Please complete all fields. Password must be at least 6 characters.');
+      const users=getUsers();
+      if(users.some(u=>u.username===username)) return showToast('This username already exists in this browser.');
+      const salt=makeSalt();
+      const passwordHash=await hashPassword(password, salt);
+      const user={name,email,role,username,salt,passwordHash,createdAt:new Date().toISOString()};
+      users.push(user); setUsers(users); setActiveUser({name,email,role,username});
+      state=loadState();
+      state.currentView='intro'; saveState();
+      updateAuthVisibility(); render(); showToast('Account created. Welcome to DigiHealth Lab.');
+    });
+    $('loginForm')?.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const username=$('loginUsername').value.trim().toLowerCase();
+      const password=$('loginPassword').value;
+      const user=getUsers().find(u=>u.username===username);
+      if(!user) return showToast('Username not found. Create an account first.');
+      const passwordHash=await hashPassword(password, user.salt);
+      if(passwordHash!==user.passwordHash) return showToast('Incorrect password.');
+      setActiveUser({name:user.name,email:user.email,role:user.role,username:user.username});
+      state=loadState();
+      updateAuthVisibility(); render(); showToast('Login successful.');
+    });
+    $('logoutBtn')?.addEventListener('click',()=>{ clearActiveUser(); updateAuthVisibility(); setAuthMode('login'); showToast('Logged out.'); });
+    updateAuthVisibility();
+  }
+
+  function setTitle(title){ $('pageTitle').textContent = title; }
+  function showToast(msg){ const t=$('toast'); t.textContent=msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'),2600); }
+  function pct(n,d){ return d ? Math.round((n/d)*100) : 0; }
+  function auditScore(){ const vals=Object.values(state.audit); return pct(vals.filter(Boolean).length, vals.length); }
+  function doneCount(){ return state.completedSteps.length; }
+
+  function initNav(){
+    $('mainNav').innerHTML = nav.map(item => `<button class="nav-btn ${state.currentView===item.id?'active':''}" data-view="${item.id}"><span>${item.icon}</span><span>${item.label}</span></button>`).join('');
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => { state.currentView=btn.dataset.view; saveState(); render(); $('sidebar').classList.remove('open'); }));
+  }
+
+  function render(){
+    initNav();
+    let view = state.currentView;
+    const titles = Object.fromEntries(nav.map(n=>[n.id,n.label]));
+    const map = {dashboard, intro, his:hisGuide, quiz:miniQuiz, terminology, coding, library:medicalLibrary, checklists:officialChecklists, statistics:medicalStatistics, directory:webDirectory, feedback, collaboration, reports, simulator, telehealth};
+    if(!map[view]){ view='dashboard'; state.currentView='dashboard'; saveState(); }
+    setTitle(titles[view] || 'Dashboard');
+    $('view').innerHTML = guideHtml(view) + map[view]();
+    bindView(view);
+  }
+
+
+  const pageGuides = {
+    dashboard:{title:'Dashboard guide', body:'Start here from the Digital Hospital Learning Map. Click each visual learning zone to open the related course hub, dictionary, coding lab, medical library, feedback, collaboration or portfolio page.'},
+    intro:{title:'Platform guide', body:'This page explains the purpose, scope and active sections of DigiHealth Lab.'},
+    his:{title:'HIS guide', body:'Use this professional guide to understand hospital information systems, core modules, system design, procurement, vendor selection, contracting, implementation, upgrades and support before choosing a HIS vendor.'},
+    quiz:{title:'Mini Quiz Game guide', body:'Choose a course and answer 100 game-style questions. After each answer, the system immediately shows correct or wrong feedback, displays the correct answer, gives a warning alert, and saves your score for the student dashboard.'},
+    terminology:{title:'Dictionary guide', body:'Choose a category first, then optionally search within that category. Terms are displayed alphabetically inside the selected category.'},
+    simulator:{title:'HIS Simulation guide', body:'Practice the complete fictional hospital journey from patient arrival to discharge, transfer or death. Each step shows the responsible people, departments, HIS/EMR modules, required documents, risks and a practical student task.'},
+    coding:{title:'Medical Coding Lab guide', body:'Read the case, select diagnosis, procedure, lab, imaging and drug-related codes, then check your result. The app shows correct codes, missing codes, extra codes and learning suggestions.'},
+    library:{title:'Medical Library guide', body:'Use this library to access legal free/open PDF resources grouped by specialty. Paid textbook links and unauthorized PDF copies are excluded.'},
+    checklists:{title:'Official Checklists guide', body:'Choose a specialty area first, then select a checklist. Downloadable PDFs and official/open source links are shown only after selection.'},
+    statistics:{title:'Hospital Statistics Indicators guide', body:'Select a hospital statistics category to view the indicator definition, frequency, responsible staff, reporting destination, source data and completion rules. No Excel workbook is required in this version.'},
+    directory:{title:'Websites & Research Directory guide', body:'Choose a category first, then choose a subcategory to view related official websites, EHR companies, standards, research databases, journal sources and scientific article platforms.'},
+    telehealth:{title:'Telehealth Simulator guide', body:'Practice virtual care documentation with patient identity confirmation, telehealth consent, clinical note, follow-up plan, privacy and mHealth documentation checks.'},
+    feedback:{title:'Feedback & Suggestions guide', body:'Use this page to send comments, improvement ideas, error reports and educational suggestions directly to the platform designer by email.'},
+    collaboration:{title:'Collaboration guide', body:'Specialists, companies and universities can use this page to propose academic, training, research, HIS simulation or digital health collaboration opportunities.'},
+    reports:{title:'Portfolio & Certificate guide', body:'Review recorded learning activity and download certificates only for Mini Quiz courses completed with at least 70% correct answers.'},
+  };
+
+  function guideHtml(view){
+    const g = pageGuides[view] || pageGuides.dashboard;
+    return `<aside class="page-guide"><div class="guide-icon">💡</div><div><strong>${g.title}</strong><p>${g.body}</p></div></aside>`;
+  }
+
+
+  function dashboard(){
+    const user=getActiveUser() || {name:'Student', role:'Learner'};
+    const mapItems = [
+      {go:'his', icon:'🏥', title:'HIS Guide', sub:'Selection • implementation • support'},
+      {go:'quiz', icon:'🎮', title:'Mini Quiz Game', sub:'100 questions per course'},
+      {go:'terminology', icon:'🔎', title:'Terminology Dictionary', sub:'Alphabetical terms by category'},
+      {go:'coding', icon:'🧾', title:'Medical Coding Lab', sub:'Story-based coding examples'},
+      {go:'library', icon:'📚', title:'Medical Library', sub:'Free/open references'},
+      {go:'checklists', icon:'☑️', title:'Official Checklists', sub:'Downloadable PDFs'},
+      {go:'statistics', icon:'📈', title:'Hospital Statistics', sub:'Indicators • rules • reporting'},
+      {go:'directory', icon:'🌐', title:'Websites & Research', sub:'Companies • databases • journals'},
+      {go:'feedback', icon:'💬', title:'Feedback', sub:'Suggestions • improvements'},
+      {go:'collaboration', icon:'🤝', title:'Collaboration', sub:'Universities • companies'},
+      {go:'reports', icon:'🎓', title:'Portfolio & Certificate', sub:'Quiz certificates • activity'},
+    ];
+    return html`
+      <section class="about-top-card card">
+        <div class="about-top-header">
+          <div class="about-top-logo">DL</div>
+          <div>
+            <span class="pill success">About Us</span>
+            <h2>DigiHealth Lab</h2>
+            <p class="about-subtitle">Web-Based University Digital Health Platform</p>
+          </div>
+        </div>
+        <div class="about-top-grid">
+          <div class="about-top-panel">
+            <h3>About the Platform</h3>
+            <p>DigiHealth Lab is an academic digital health platform designed to support students, health information professionals and healthcare learners through structured practice in medical terminology, medical coding, hospital statistics, health technology resources, official checklists, HIS knowledge, research links and portfolio-based learning.</p>
+            <p>The platform uses educational content, fictional learning scenarios and curated professional resources to help users connect classroom knowledge with practical healthcare information management and digital health concepts.</p>
+          </div>
+          <div class="about-top-panel manager-message">
+            <h3>Project Manager Message</h3>
+            <p>"My goal with DigiHealth Lab is to create a practical, accessible and professionally organized learning environment for students and healthcare professionals who want to build stronger skills in digital health, medical coding, health information management and healthcare technology. This platform is designed to grow step by step as an academic resource and professional portfolio project."</p>
+            <div class="manager-signature">
+              <strong>Motahhareh Khorshidzadeh</strong>
+              <span>Project Manager & Platform Designer</span>
+              <span>Health IT Specialist | HIS & EMR Systems Consultant</span>
+              <span>Researcher in Digital Health</span>
+              <span>motahhareh.khorshidzadeh@gmail.com</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="dashboard-welcome card">
+        <div class="welcome-copy">
+          <span class="pill light">Welcome to DigiHealth Lab</span>
+          <h3>Hello ${escapeHtml(user.name || 'Student')}, choose a learning area.</h3>
+          <p>Use the learning map to open the platform sections. Each section is designed for academic digital health, medical coding, terminology, medical library, official checklists, hospital statistics indicators, research resources and portfolio development.</p>
+        </div>
+        <div class="welcome-visual" aria-hidden="true">
+          <div class="orb orb-a">📚</div>
+          <div class="orb orb-b">🧾</div>
+          <div class="orb orb-c">☑️</div>
+          <div class="orb orb-d">📈</div>
+        </div>
+      </div>
+
+      <div class="visual-dashboard card dashboard-map-card">
+        <div class="section-title" style="margin-top:0">
+          <div>
+            <h3>Digital Hospital Learning Map</h3>
+            <p>Click a learning zone to open that section. The map is organized for university-level digital health learning and practice.</p>
+          </div>
+          <span class="pill success">Clickable map</span>
+        </div>
+        <div class="hospital-map interactive-map compact-map">
+          <button class="map-center clickable" data-go="library">📚<strong>DigiHealth Lab Learning Map</strong><small>Select a module</small></button>
+          ${mapItems.map((m,i)=>`<button class="map-item map-click compact item${i+1}" data-go="${m.go}"><span>${m.icon}</span><strong>${m.title}</strong><small>${m.sub}</small></button>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function intro(){
+    const sections = [
+      {icon:'🏥', title:'HIS Guide', guide:'Use this section as a professional guide for understanding, selecting, contracting, implementing, upgrading and supporting hospital information systems.', includes:'HIS definition, architecture, modules, vendor selection, RFP checklist, implementation roadmap, companies, support and upgrade planning.'},
+      {icon:'🎮', title:'Mini Quiz Game', guide:'Choose one course and answer one question at a time. The game gives instant feedback, correct answer and explanation.', includes:'Course-based quiz practice with score, streak and progress tracking.'},
+      {icon:'🔎', title:'Terminology Dictionary', guide:'Select a category first. Terms are displayed alphabetically only after a category is selected.', includes:'Medical, coding, digital health, health technology, standards and hospital data terms.'},
+      {icon:'🧾', title:'Medical Coding Lab', guide:'Select a coding classification and then a case. Read the patient story and review the educational answer key with diagnoses, procedures, surgery, drugs and mortality coding where relevant.', includes:'Primary/principal diagnosis, secondary diagnoses, procedures, operations, medication codes and mortality examples.'},
+      {icon:'📚', title:'Medical Library', guide:'Choose a discipline and specialty, then open free/open legal books and references only.', includes:'Open PDF and open-access resources for nursing, medicine, health information, medical technology, radiology, laboratory, midwifery, EMS, nutrition and dentistry.'},
+      {icon:'☑️', title:'Official Checklists', guide:'Select a specialty/topic and download the linked checklist or official resource relevant to that area.', includes:'Clinical, nursing, surgery, laboratory, radiology, infection prevention, documentation and safety checklist resources.'},
+      {icon:'📈', title:'Hospital Statistics Indicators', guide:'Learn daily, monthly and annual hospital indicators, who completes each dataset, where data is submitted and the rules for interpreting each statistic.', includes:'Census, admissions, discharges, mortality, surgery, OPD, emergency, diagnostics, maternity, medical records, coding, archive and retention statistics.'},
+      {icon:'🌐', title:'Websites & Research Directory', guide:'Choose a category and subcategory to view relevant official organizations, HIS/EHR companies, standards, databases, journals and research sources.', includes:'WHO, ONC, HL7, PubMed, PubMed Central, clinical databases, standards bodies and health technology organizations.'},
+      {icon:'💬', title:'Feedback & Suggestions', guide:'Use this page to send improvement ideas, content corrections or suggestions to the platform owner.', includes:'Feedback email workflow.'},
+      {icon:'🤝', title:'Collaboration', guide:'Use this page to propose collaboration from universities, companies, professionals or academic teams.', includes:'Academic, research, training and digital health collaboration request workflow.'},
+      {icon:'🎓', title:'Portfolio & Certificate', guide:'Use this area after completing Mini Quiz courses to review scores and download course certificates when the score is 70% or higher.', includes:'Course certificate status, score evidence and downloadable PDF certificate.'},
+    ];
+    return html`
+      <div class="card platform-guide-clean">
+        <div class="section-title" style="margin-top:0">
+          <div><h3>Platform Guide</h3><p>Use this page as the main orientation guide. Each platform section below explains what the user should do, what the section contains and how it supports academic learning.</p></div>
+          <span class="pill success">Complete guide</span>
+        </div>
+        <div class="platform-guide-banner">
+          <div class="platform-guide-mark">🧭</div>
+          <div>
+            <h4>How to use DigiHealth Lab</h4>
+            <p>Start by choosing the section that matches your learning need. Do not enter patient-identifiable information. Use only fictional or academic practice data. Review the guide inside each page before starting activities, then use the portfolio page to collect evidence of completed learning.</p>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <div class="section-title" style="margin-top:0"><div><h3>What this platform includes</h3><p>All current platform sections are listed below with a short purpose and use guide.</p></div></div>
+        <div class="guide-section-grid">
+          ${sections.map(s=>`<div class="guide-section-card"><div class="guide-section-icon">${s.icon}</div><h4>${s.title}</h4><p><strong>How to use:</strong> ${s.guide}</p><p><strong>Includes:</strong> ${s.includes}</p></div>`).join('')}
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <div class="section-title" style="margin-top:0"><div><h3>Recommended learning route</h3><p>A simple academic pathway for students who are using the platform for the first time.</p></div></div>
+        <div class="pathway-grid">
+          ${[
+            ['1','Create an account','Create a local username/password and login to save progress in this browser.'],
+            ['2','Read the Platform Guide','Understand each section and choose the learning path that matches your course.'],
+            ['3','Study core references','Use Medical Library, Terminology Dictionary and Websites & Research Directory before practical exercises.'],
+            ['4','Practice coding and quizzes','Use Medical Coding Lab and Mini Quiz Game to test understanding.'],
+            ['5','Review statistics and official resources','Use Hospital Statistics Indicators and Websites & Research Directory for reporting, standards and research sources.'],
+            ['6','Generate portfolio evidence','Use Portfolio & Certificate to review quiz completion and download eligible certificates.']
+          ].map(x=>`<div class="path-step"><b>${x[0]}</b><h4>${x[1]}</h4><p>${x[2]}</p></div>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+
+  function learning(){
+    return html`
+      <div class="card">
+        <div class="section-title" style="margin-top:0"><div><h3>Learning Center</h3><p>Academic content aligned with the current DigiHealth Lab modules: terminology, story-based coding, digital health resources, health information management, official standards, medical filing and hospital statistics.</p></div></div>
+        <div class="module-grid">
+          ${learningModules.map((m,i)=>`<div class="module-card"><div class="icon">${m.icon}</div><span class="pill ${i<2?'success':'blue'}">${m.level}</span><h4>${m.title}</h4><p>${m.body}</p></div>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+
+  function expandTerminologyDictionary(){
+    const existing = new Set(terms.map(t => `${String(t[0]).toLowerCase()}|${String(t[4]||'General').toLowerCase()}`));
+    const add = (term, expansion, meaning, usage, category) => {
+      const key = `${String(term).toLowerCase()}|${String(category||'General').toLowerCase()}`;
+      if(!existing.has(key)) { terms.push([term, expansion, meaning, usage, category]); existing.add(key); }
+    };
+    const bodySystems = [
+      ['Cardiology','cardiac','cardiovascular system','heart and blood vessel documentation, diagnostics, coding and HIS reporting'],
+      ['Pulmonology','respiratory','respiratory system','lung, airway, oxygenation and pulmonary care documentation'],
+      ['Neurology','neurological','nervous system','brain, spinal cord, nerves, stroke, seizure and neurological assessment records'],
+      ['Gastroenterology','gastrointestinal','digestive system','GI symptoms, procedures, endoscopy, nutrition and digestive disorders'],
+      ['Hepatology','hepatic','liver and biliary system','liver disease, jaundice, hepatitis and biliary documentation'],
+      ['Nephrology','renal','kidney and urinary system','kidney function, dialysis, urine findings and renal coding'],
+      ['Urology','urologic','urinary and male reproductive system','urinary symptoms, procedures and urologic surgery documentation'],
+      ['Endocrinology','endocrine','hormonal and metabolic system','diabetes, thyroid, adrenal and metabolic care records'],
+      ['Hematology','hematologic','blood and blood-forming system','anemia, coagulation, transfusion and blood disorder documentation'],
+      ['Oncology','oncologic','cancer care system','tumor, staging, chemotherapy, radiation and cancer registry concepts'],
+      ['Orthopedics','musculoskeletal','bone, joint and muscle system','fracture, joint, trauma, mobility and orthopedic procedures'],
+      ['Rheumatology','rheumatologic','autoimmune and joint disease field','arthritis, autoimmune disease and inflammatory documentation'],
+      ['Dermatology','dermatologic','skin system','rash, wound, lesion, ulcer and integumentary documentation'],
+      ['Obstetrics','obstetric','pregnancy and childbirth care','antenatal, delivery, postpartum and maternal documentation'],
+      ['Gynecology','gynecologic','female reproductive system','reproductive health, menstrual, pelvic and gynecologic procedure records'],
+      ['Pediatrics','pediatric','child health field','growth, immunization, pediatric disease and child patient records'],
+      ['Geriatrics','geriatric','older adult care','frailty, falls, polypharmacy and elder care documentation'],
+      ['Psychiatry','psychiatric','mental health field','mental health assessment, risk, therapy and behavioral documentation'],
+      ['Infectious Disease','infectious disease','infection and communicable disease field','infection diagnosis, cultures, isolation and antimicrobial documentation'],
+      ['Emergency Medicine','emergency','acute care field','triage, emergency diagnosis, stabilization and urgent workflows'],
+      ['Anesthesia','anesthesia','perioperative anesthesia care','pre-op assessment, anesthesia record and recovery documentation'],
+      ['Radiology','radiologic','medical imaging field','imaging orders, reports, PACS, DICOM and radiology workflow'],
+      ['Pathology','pathologic','laboratory and tissue diagnosis field','specimen, biopsy, cytology and pathology reporting'],
+      ['Pharmacy','pharmaceutical','medication and drug safety field','medication orders, dispensing, reconciliation and drug safety']
+    ];
+    const clinicalConcepts = [
+      ['assessment','clinical evaluation of patient status','clinical notes, triage, ward review and follow-up documentation'],
+      ['history','patient-reported and documented background information','admission notes, progress notes and outpatient records'],
+      ['examination','physical or focused clinical examination','doctor notes, templates and clinical documentation review'],
+      ['diagnosis','identified disease, condition or clinical problem','problem list, coding, billing, discharge summary and reporting'],
+      ['differential diagnosis','possible conditions considered before final diagnosis','clinical reasoning, case review and teaching scenarios'],
+      ['screening','process used to identify risk or early disease','preventive care, public health and outpatient HIS modules'],
+      ['monitoring','ongoing observation of patient status or data','vital signs, RPM, ward care and chronic disease follow-up'],
+      ['risk factor','factor associated with increased chance of disease or complication','assessment, prevention, analytics and care planning'],
+      ['complication','unexpected or adverse condition related to illness or care','coding, quality review, incident reporting and audit'],
+      ['comorbidity','additional condition present with the main problem','case-mix, severity, coding and resource use analysis'],
+      ['exacerbation','worsening of a chronic disease or condition','emergency, admission and clinical documentation'],
+      ['remission','reduction or disappearance of disease activity','oncology, chronic disease and follow-up records'],
+      ['relapse','return of disease after improvement','follow-up, oncology, psychiatry and chronic care documentation'],
+      ['episode of care','defined period of healthcare service for a problem','HIS workflow, billing, analytics and care coordination'],
+      ['care pathway','structured sequence of care activities','clinical governance, HIS design and quality improvement'],
+      ['referral','request for care or opinion from another service','consultation, transfer, outpatient and telehealth workflows'],
+      ['follow-up','planned review after a visit or discharge','discharge planning, appointment scheduling and patient portal'],
+      ['patient education','information given to support self-care and safety','discharge, nursing notes, telehealth and chronic care'],
+      ['clinical indicator','measurable sign, result or status used for care decisions','dashboards, quality reporting and data analysis'],
+      ['red flag','warning sign requiring urgent attention','triage, telehealth, safety checks and escalation']
+    ];
+    bodySystems.forEach(([specialty, adjective, system, usage]) => {
+      add(specialty, 'Clinical specialty', `A healthcare specialty focused on the ${system}.`, `Used in referral, department workflow, clinical documentation, coding and university learning modules related to ${usage}.`, 'Clinical Specialties & Body Systems');
+      clinicalConcepts.forEach(([concept, meaning, conceptUse]) => add(`${adjective} ${concept}`, 'System-based clinical term', `A ${concept} related to the ${system}; ${meaning}.`, `Used in ${conceptUse} for ${usage}.`, 'System-Based Medical Terms'));
+    });
+
+    const signSymptomMatrix = [
+      ['pain','unpleasant sensory or emotional experience documented by location, duration and severity'],['fever','elevated body temperature recorded as a clinical finding'],['swelling','enlargement or edema documented in assessment'],['bleeding','loss of blood recorded as symptom, sign or complication'],['fatigue','tiredness or lack of energy documented in history'],['nausea','feeling of needing to vomit documented in review of systems'],['vomiting','expulsion of stomach contents documented in clinical notes'],['dizziness','sensation of lightheadedness or imbalance'],['weakness','reduced strength or functional ability'],['numbness','reduced or altered sensation'],['shortness of breath','difficulty breathing or dyspnea'],['palpitation','awareness of heartbeat or abnormal rhythm'],['cough','forceful respiratory symptom documented in respiratory assessment'],['headache','pain in the head or cranial region'],['rash','skin eruption or visible dermatologic finding'],['wound','break in skin or tissue integrity'],['ulcer','open sore or tissue defect'],['edema','fluid-related swelling'],['dehydration','deficit of body water or fluid volume'],['confusion','altered mental status or cognitive disorientation']
+    ];
+    const locations = ['chest','abdominal','pelvic','back','head','neck','limb','joint','skin','wound','renal','urinary','respiratory','neurological','cardiac','postoperative','obstetric','pediatric','geriatric','diabetic'];
+    locations.forEach(loc => signSymptomMatrix.forEach(([s,m]) => add(`${loc} ${s}`, 'Sign or symptom phrase', `A clinical phrase describing ${m} in a ${loc} context.`, 'Used in chief complaint, history, triage, progress notes, coding support and audit review.', 'Signs, Symptoms & Clinical Findings Expanded')));
+
+    const procedures = ['biopsy','excision','incision and drainage','repair','resection','drainage','insertion','replacement','revision','removal','endoscopy','laparoscopy','arthroscopy','angiography','catheterization','intubation','debridement','transfusion','dialysis','imaging study','ultrasound','CT scan','MRI scan','X-ray','ECG','echocardiography','spirometry','colonoscopy','gastroscopy','cystoscopy'];
+    const procAreas = ['cardiac','pulmonary','renal','urologic','gastrointestinal','hepatobiliary','neurological','orthopedic','dermatologic','obstetric','gynecologic','pediatric','oncologic','vascular','emergency','postoperative','wound','infectious disease','radiology','laboratory'];
+    procAreas.forEach(area => procedures.forEach(p => add(`${area} ${p}`, 'Procedure or service term', `A healthcare procedure/service phrase involving ${p} in a ${area} context.`, 'Used in procedure documentation, orders, operative reports, coding practice, billing workflows and medical records audit.', 'Procedures, Surgery & Services Expanded')));
+
+    const codeSetTerms = [
+      ['ICD-10-CM','International Classification of Diseases, Tenth Revision, Clinical Modification','Diagnosis classification used in medical coding education and many administrative data workflows.','Used for diagnosis coding, morbidity statistics, billing support and case review.'],
+      ['ICD-10-PCS','International Classification of Diseases, Tenth Revision, Procedure Coding System','Inpatient procedure coding system with characters describing procedure attributes.','Used in inpatient procedure coding practice and operating/procedure documentation review.'],
+      ['ICD-11 MMS','ICD-11 Mortality and Morbidity Statistics','WHO classification release used for mortality and morbidity coding concepts.','Used for international disease classification mortality coding and health statistics.'],
+      ['CPT','Current Procedural Terminology','A procedure and service code set maintained by the AMA.','Used in professional service coding education, outpatient procedure examples and payer workflows.'],
+      ['HCPCS Level II','Healthcare Common Procedure Coding System Level II','Code set for products, supplies and services not included in CPT in US contexts.','Used for supplies, durable medical equipment, ambulance and other service examples.'],
+      ['SNOMED CT','Systematized Nomenclature of Medicine Clinical Terms','Comprehensive clinical terminology for semantic documentation and interoperability.','Used in EHR problem lists, clinical concepts and semantic interoperability.'],
+      ['LOINC','Logical Observation Identifiers Names and Codes','Standard for identifying laboratory tests, observations, measurements and documents.','Used in lab interfaces, observation results, FHIR resources and data exchange.'],
+      ['RxNorm','Normalized drug naming system from the U.S. National Library of Medicine','Terminology that links drug names and clinical drug concepts.','Used in medication interoperability, e-prescribing and drug data mapping.'],
+      ['ATC','Anatomical Therapeutic Chemical Classification','Drug classification system grouping medicines by organ/system and therapeutic use.','Used in pharmacoepidemiology, medication analytics and drug-class learning.'],
+      ['NDC','National Drug Code','Identifier for drug products in the United States.','Used in medication product identification and drug-related administrative data.'],
+      ['ICD-O','International Classification of Diseases for Oncology','Classification for tumor site and morphology concepts.','Used in cancer registry education and oncology data coding.'],
+      ['DRG','Diagnosis Related Group','Patient classification concept grouping cases for resource use and payment systems.','Used in hospital statistics, reimbursement learning and case-mix analysis.']
+    ];
+    codeSetTerms.forEach(t => add(t[0], t[1], t[2], t[3], 'Medical Coding Systems & Code Sets'));
+    const icdChapters = [
+      ['A00-B99','Certain infectious and parasitic diseases'],['C00-D49','Neoplasms'],['D50-D89','Blood and immune mechanism disorders'],['E00-E89','Endocrine, nutritional and metabolic diseases'],['F01-F99','Mental, behavioral and neurodevelopmental disorders'],['G00-G99','Diseases of the nervous system'],['H00-H59','Diseases of the eye and adnexa'],['H60-H95','Diseases of the ear and mastoid process'],['I00-I99','Diseases of the circulatory system'],['J00-J99','Diseases of the respiratory system'],['K00-K95','Diseases of the digestive system'],['L00-L99','Diseases of the skin and subcutaneous tissue'],['M00-M99','Diseases of the musculoskeletal system and connective tissue'],['N00-N99','Diseases of the genitourinary system'],['O00-O9A','Pregnancy, childbirth and the puerperium'],['P00-P96','Certain conditions originating in the perinatal period'],['Q00-Q99','Congenital malformations and chromosomal abnormalities'],['R00-R99','Symptoms, signs and abnormal clinical and laboratory findings'],['S00-T88','Injury, poisoning and external causes consequences'],['V00-Y99','External causes of morbidity'],['Z00-Z99','Factors influencing health status and contact with health services']
+    ];
+    icdChapters.forEach(([range,title]) => add(`ICD-10-CM ${range}`, 'ICD chapter range', `ICD-10-CM chapter/category range for ${title}.`, 'Used to teach code navigation, chapter selection, diagnosis grouping and coding practice.', 'ICD Chapter Ranges'));
+    const exampleCodes = [
+      ['J18.9','Pneumonia, unspecified organism'],['J45.909','Unspecified asthma, uncomplicated'],['I10','Essential hypertension'],['E11.9','Type 2 diabetes mellitus without complications'],['E11.65','Type 2 diabetes mellitus with hyperglycemia'],['N39.0','Urinary tract infection, site not specified'],['A41.9','Sepsis, unspecified organism'],['R07.9','Chest pain, unspecified'],['R06.02','Shortness of breath'],['R50.9','Fever, unspecified'],['I21.4','Non-ST elevation myocardial infarction'],['I50.9','Heart failure, unspecified'],['K35.80','Unspecified acute appendicitis'],['K80.20','Calculus of gallbladder without cholecystitis without obstruction'],['N18.9','Chronic kidney disease, unspecified'],['D64.9','Anemia, unspecified'],['C50.919','Malignant neoplasm of unspecified site of unspecified female breast'],['S72.001A','Fracture of unspecified part of neck of right femur, initial encounter'],['Z51.11','Encounter for antineoplastic chemotherapy'],['Z79.4','Long term current use of insulin'],['Z88.0','Allergy status to penicillin'],['U07.1','COVID-19']
+    ];
+    exampleCodes.forEach(([code,title]) => add(code, 'ICD example code', `${code} is an example diagnosis code concept: ${title}.`, 'Used in coding practice cases, diagnosis selection, documentation review and student feedback. Always verify against the official current code set.', 'ICD Example Codes'));
+    const pcsRoots = ['Excision','Resection','Drainage','Extirpation','Fragmentation','Destruction','Extraction','Insertion','Replacement','Supplement','Change','Removal','Revision','Inspection','Map','Bypass','Dilation','Occlusion','Restriction','Release','Transfer','Reposition','Fusion','Alteration','Creation','Control','Repair'];
+    pcsRoots.forEach(root => add(`ICD-10-PCS root operation: ${root}`, 'PCS root operation', `A root operation concept used to describe the objective of an inpatient procedure: ${root}.`, 'Used in inpatient procedure coding education, operative report review and coding lab guidance.', 'ICD-10-PCS Root Operations'));
+    const cptRanges = [['00100-01999','Anesthesia'],['10004-69990','Surgery'],['70010-79999','Radiology'],['80047-89398','Pathology and Laboratory'],['90281-99607','Medicine'],['99202-99499','Evaluation and Management']];
+    cptRanges.forEach(([range,title]) => add(`CPT ${range}`, 'CPT code range', `CPT range commonly associated with ${title} services.`, 'Used in procedural/service coding education and code-range navigation. Verify official CPT through licensed current resources.', 'CPT & HCPCS Code Ranges'));
+    const hcpcsExamples = [['A0428','Ambulance service, basic life support, non-emergency transport'],['E0114','Crutches, underarm, other than wood'],['J0696','Injection, ceftriaxone sodium'],['G0008','Administration of influenza virus vaccine'],['L1830','Knee orthosis immobilizer']];
+    hcpcsExamples.forEach(([code,title]) => add(code, 'HCPCS example code', `${code} is an example HCPCS Level II concept: ${title}.`, 'Used in supplies, medication-administration, ambulance or service coding examples. Verify against official CMS resources.', 'CPT & HCPCS Code Ranges'));
+    const loincExamples = [['718-7','Hemoglobin [Mass/volume] in Blood'],['4548-4','Hemoglobin A1c/Hemoglobin.total in Blood'],['2345-7','Glucose [Mass/volume] in Serum or Plasma'],['6690-2','Leukocytes [#/volume] in Blood'],['94531-1','SARS-CoV-2 RNA panel'],['8867-4','Heart rate'],['8310-5','Body temperature'],['8480-6','Systolic blood pressure'],['8462-4','Diastolic blood pressure']];
+    loincExamples.forEach(([code,title]) => add(code, 'LOINC example code', `${code} is an example LOINC concept: ${title}.`, 'Used in laboratory/observation interfaces, FHIR observations, result mapping and data quality review.', 'LOINC, Lab & Observation Codes'));
+    const drugClasses = [['A','Alimentary tract and metabolism'],['B','Blood and blood-forming organs'],['C','Cardiovascular system'],['D','Dermatologicals'],['G','Genito-urinary system and sex hormones'],['H','Systemic hormonal preparations'],['J','Antiinfectives for systemic use'],['L','Antineoplastic and immunomodulating agents'],['M','Musculoskeletal system'],['N','Nervous system'],['R','Respiratory system'],['S','Sensory organs']];
+    drugClasses.forEach(([code,title]) => add(`ATC ${code}`, 'ATC first-level drug class', `ATC ${code} represents ${title}.`, 'Used in medication classification, pharmacy analytics, drug safety education and prescribing data review.', 'Medication Codes & Drug Classifications'));
+    const medConcepts = ['generic name','brand name','dose','route','frequency','duration','contraindication','adverse drug reaction','drug allergy','drug interaction','medication reconciliation','dispensing status','administration record','e-prescription','formulary','therapeutic class','high-alert medication','look-alike sound-alike medication','controlled medicine','antimicrobial stewardship'];
+    medConcepts.forEach(m => add(m, 'Medication safety term', `A medication-related term used in prescribing, dispensing, administration or drug safety workflows.`, 'Used in pharmacy module, MAR, e-prescribing, medication reconciliation, audit and telehealth medication review.', 'Medication Codes & Drug Classifications'));
+    const hisModules = ['ADT','registration','master patient index','appointment scheduling','triage','bed management','ward management','EMR documentation','CPOE','laboratory information system','radiology information system','PACS','pharmacy module','billing module','insurance module','medical records module','document scanning','release of information','audit trail','role-based access control','patient portal','telehealth module','remote patient monitoring dashboard','clinical decision support','quality dashboard','data warehouse','interoperability engine','FHIR server','HL7 interface engine','DICOM viewer'];
+    hisModules.forEach(m => add(m, 'HIS/EMR workflow term', `A hospital information system or electronic medical record workflow component: ${m}.`, 'Used in HIS simulation, system training, workflow mapping, access control, reporting and health informatics education.', 'HIS, EMR & Hospital Workflow Expanded'));
+    const auditTerms = ['record completeness score','deficiency notice','missing document tracker','delinquent record','incomplete record','signature deficiency','date/time deficiency','authentication deficiency','late entry','addendum','amendment','record retention','document indexing','chart reconciliation','coding readiness','billing readiness','legal record of care','audit sampling','quality indicator','clinical documentation improvement','physician query','follow-up escalation','document turnaround time','medical record abstracting','release authorization','scanned document quality','duplicate record risk','patient identification error','record correction request','confidentiality breach','minimum necessary access'];
+    auditTerms.forEach(a => add(a, 'Audit and documentation quality term', `A medical records audit term related to ${a}.`, 'Used in Audit & Missing Docs module, HIM quality control, documentation compliance, coding readiness and portfolio reports.', 'Audit, Missing Documents & Documentation Quality'));
+    const teleTerms = ['telehealth consent','telemedicine encounter','virtual waiting room','video consultation','phone consultation','secure messaging','asynchronous telehealth','synchronous telehealth','remote patient monitoring','home blood pressure monitoring','remote glucose monitoring','wearable device data','patient-generated health data','digital front door','identity verification','privacy environment check','technology failure plan','telehealth documentation','virtual visit note','remote follow-up','patient portal upload','digital triage','telehealth escalation','emergency red flag','e-prescription after telehealth','remote care plan','RPM alert','device calibration','data transmission failure','digital divide'];
+    teleTerms.forEach(t => add(t, 'Telehealth and mHealth term', `A digital health term used in virtual care and remote monitoring: ${t}.`, 'Used in telehealth simulation, mHealth documentation, patient portal workflow, privacy checks and digital health training.', 'Telehealth, mHealth & Remote Care Expanded'));
+
+    const commonAbbreviations = [
+      ['ABG','Arterial blood gas'],['ACE','Angiotensin-converting enzyme'],['ACL','Anterior cruciate ligament'],['ADL','Activities of daily living'],['AED','Automated external defibrillator'],['AKI','Acute kidney injury'],['ALT','Alanine aminotransferase'],['AMA','Against medical advice'],['APTT','Activated partial thromboplastin time'],['ARDS','Acute respiratory distress syndrome'],['ASA','American Society of Anesthesiologists'],['AST','Aspartate aminotransferase'],['BMI','Body mass index'],['BP','Blood pressure'],['BPH','Benign prostatic hyperplasia'],['BUN','Blood urea nitrogen'],['CABG','Coronary artery bypass graft'],['CBC','Complete blood count'],['CC','Chief complaint'],['CCU','Coronary care unit'],['CHF','Congestive heart failure'],['CKD','Chronic kidney disease'],['COPD','Chronic obstructive pulmonary disease'],['CPR','Cardiopulmonary resuscitation'],['CRP','C-reactive protein'],['CSF','Cerebrospinal fluid'],['CT','Computed tomography'],['CVA','Cerebrovascular accident'],['CXR','Chest X-ray'],['DNR','Do not resuscitate'],['DOB','Date of birth'],['DVT','Deep vein thrombosis'],['ECG','Electrocardiogram'],['ED','Emergency department'],['EEG','Electroencephalogram'],['ENT','Ear, nose and throat'],['ESRD','End-stage renal disease'],['FBS','Fasting blood sugar'],['FHR','Fetal heart rate'],['GI','Gastrointestinal'],['GU','Genitourinary'],['HbA1c','Glycated hemoglobin'],['Hct','Hematocrit'],['Hgb','Hemoglobin'],['HPI','History of present illness'],['HR','Heart rate'],['HTN','Hypertension'],['ICU','Intensive care unit'],['IM','Intramuscular'],['INR','International normalized ratio'],['I&O','Intake and output'],['IV','Intravenous'],['LFT','Liver function test'],['LOS','Length of stay'],['LP','Lumbar puncture'],['LMP','Last menstrual period'],['MRI','Magnetic resonance imaging'],['MRN','Medical record number'],['NAD','No acute distress'],['NGT','Nasogastric tube'],['NPO','Nothing by mouth'],['NSTEMI','Non-ST elevation myocardial infarction'],['O2','Oxygen'],['OB','Obstetrics'],['OR','Operating room'],['OT','Occupational therapy'],['PACU','Post-anesthesia care unit'],['PE','Pulmonary embolism'],['PHI','Protected health information'],['PMH','Past medical history'],['PO','By mouth'],['PRN','As needed'],['PT','Physical therapy'],['PTT','Partial thromboplastin time'],['RBC','Red blood cell'],['ROS','Review of systems'],['RR','Respiratory rate'],['SOB','Shortness of breath'],['SOAP','Subjective, Objective, Assessment and Plan'],['SpO2','Peripheral oxygen saturation'],['STEMI','ST elevation myocardial infarction'],['TB','Tuberculosis'],['TIA','Transient ischemic attack'],['TPR','Temperature, pulse and respiration'],['UA','Urinalysis'],['UTI','Urinary tract infection'],['WBC','White blood cell']
+    ];
+    commonAbbreviations.forEach(([abbr,full]) => add(abbr, full, `${abbr} is a common medical abbreviation meaning ${full}.`, 'Used in clinical notes, orders, discharge summaries, HIS documentation and medical terminology quizzes.', 'Medical Abbreviations Expanded'));
+    const diseaseFamilies = ['acute disease','chronic disease','infectious disease','autoimmune disease','genetic disorder','congenital condition','malignant neoplasm','benign neoplasm','functional disorder','inflammatory disorder','degenerative disease','vascular disease','metabolic disorder','traumatic injury','iatrogenic complication','postoperative complication','recurrent disease','end-stage disease','unspecified condition','suspected condition'];
+    bodySystems.forEach(([specialty, adjective, system, usage]) => diseaseFamilies.forEach(df => add(`${adjective} ${df}`, 'Disease/condition phrase', `A disease or condition phrase describing a ${df} related to the ${system}.`, 'Used in diagnosis documentation, coding support, case studies, discharge summary review and health data analytics.', 'Diseases & Conditions Expanded')));
+    const labAnalytes = ['hemoglobin','hematocrit','white blood cell count','platelet count','sodium','potassium','chloride','bicarbonate','urea','creatinine','eGFR','glucose','HbA1c','total cholesterol','LDL cholesterol','HDL cholesterol','triglycerides','ALT','AST','ALP','bilirubin','albumin','troponin','BNP','CRP','ESR','prothrombin time','INR','APTT','D-dimer','lactate','blood culture','urine culture','urinalysis','thyroid-stimulating hormone','free T4','vitamin D','ferritin','iron studies','arterial blood gas','pregnancy test','COVID-19 PCR','influenza test','hepatitis B surface antigen','HIV screening','tumor marker','pathology specimen','cytology specimen','biopsy result','microbiology sensitivity'];
+    labAnalytes.forEach(l => add(l, 'Laboratory/diagnostic term', `A laboratory or diagnostic observation term: ${l}.`, 'Used in LIS, LOINC mapping, lab results, clinical documentation, coding evidence and data quality checks.', 'Diagnostics, Laboratory & Imaging Expanded'));
+    const imagingRegions = ['head','brain','neck','chest','abdomen','pelvis','spine','hip','knee','shoulder','ankle','wrist','breast','cardiac','vascular','renal','liver','gallbladder','obstetric','pediatric'];
+    const imagingTypes = ['X-ray','CT','MRI','ultrasound','Doppler ultrasound','mammography','fluoroscopy','angiography','nuclear medicine scan','PET scan','echocardiography','DICOM image','PACS study','radiology report','contrast study'];
+    imagingRegions.forEach(region => imagingTypes.forEach(type => add(`${region} ${type}`, 'Imaging term', `A diagnostic imaging term for ${type} involving the ${region}.`, 'Used in radiology orders, RIS/PACS workflow, imaging reports, DICOM records and medical records audit.', 'Diagnostics, Laboratory & Imaging Expanded')));
+    const fhirResources = ['Patient','Practitioner','Organization','Encounter','Condition','Observation','DiagnosticReport','Medication','MedicationRequest','MedicationAdministration','AllergyIntolerance','Procedure','ServiceRequest','CarePlan','CareTeam','DocumentReference','Appointment','Schedule','Slot','Location','Device','Specimen','ImagingStudy','Questionnaire','QuestionnaireResponse','Claim','Coverage','ExplanationOfBenefit','AuditEvent','Consent','Provenance','Bundle','Composition','EpisodeOfCare','Goal','RiskAssessment','Communication','CommunicationRequest','Task','List','Media','FamilyMemberHistory','Immunization','NutritionOrder','SupplyRequest','SupplyDelivery','ClinicalImpression','DetectedIssue','Flag','Subscription'];
+    fhirResources.forEach(r => add(`FHIR ${r}`, 'FHIR resource term', `A FHIR resource concept used to represent ${r} data in interoperable digital health systems.`, 'Used in interoperability, API design, EHR data exchange, health informatics standards and digital health integration.', 'FHIR, Interoperability & Standards Expanded'));
+    const healthTechTerms = ['digital front door','patient portal','online appointment','e-referral','e-prescription','clinical decision support','computerized provider order entry','digital consent','electronic signature','secure messaging','remote patient monitoring','tele-ICU','virtual ward','hospital command center','health information exchange','cloud EHR','mobile health app','wearable sensor','smart inhaler','continuous glucose monitor','digital blood pressure cuff','Bluetooth medical device','device integration','interface engine','API gateway','identity management','single sign-on','multi-factor authentication','audit log analytics','cybersecurity dashboard','data lake','data warehouse','FHIR API','DICOMweb','SMART on FHIR','clinical data repository','master data management','patient matching algorithm','duplicate record detection','data validation rule','terminology server','value set','code mapping','semantic mapping','natural language processing','computer-assisted coding','AI triage','AI documentation assistant','model monitoring','algorithm bias','explainable AI','human in the loop','software as a medical device','digital therapeutic','clinical risk alert','interoperability testing','user acceptance testing','system downtime plan','business continuity plan','disaster recovery','backup policy','role-based dashboard','student simulator','training sandbox'];
+    healthTechTerms.forEach(t => add(t, 'Digital health and medical technology term', `A health technology term related to ${t}.`, 'Used in digital health courses, HIS/EMR implementation, workflow simulation, safety, standards and health IT governance.', 'Digital Health & Medical Technology Expanded'));
+    const documentationForms = ['admission form','informed consent','surgical consent','anesthesia consent','blood transfusion consent','triage note','nursing admission note','progress note','SOAP note','operative report','anesthesia record','recovery note','medication administration record','vital signs chart','intake and output chart','fall risk assessment','pressure injury assessment','patient education form','discharge summary','referral letter','consultation note','death certificate','body release form','mortality coding worksheet','coding query form','release of information authorization','incident report','infection control form','isolation note','restraint documentation','pain assessment form','nutrition assessment','physiotherapy note','social work note','case management note','telehealth consent','virtual visit note','remote monitoring review note','privacy acknowledgement','advance directive','DNR form'];
+    documentationForms.forEach(f => add(f, 'Clinical documentation form', `A healthcare documentation form or note: ${f}.`, 'Used in medical records, EMR documentation, audit review, missing document tracking, legal record of care and coding support.', 'Clinical Documentation Forms Expanded'));
+    const mortalityTerms = ['immediate cause of death','intermediate cause of death','underlying cause of death','contributing condition','manner of death','natural death','external cause of death','death certification','pronouncement of death','time of death','place of death','certifying physician','coroner referral','medical examiner referral','postmortem examination','autopsy report','mortality coding','multiple cause coding','underlying cause selection','sequence of events','ill-defined cause','mechanism of death','terminal event','death due to complication','body release','bereavement documentation','stillbirth documentation','perinatal death','maternal death','hospital death statistics'];
+    mortalityTerms.forEach(t => add(t, 'Mortality coding and death documentation term', `A death documentation or mortality coding term related to ${t}.`, 'Used in expired patient HIS workflow, death certificate sequence, mortality statistics, medical records audit and coding education.', 'Mortality Coding & Death Documentation'));
+
+  }
+  expandTerminologyDictionary();
+
+  function contactHero(title, subtitle, icon){
+    return `<div class="contact-hero card"><div><span class="pill success">Direct email connection</span><h3>${title}</h3><p>${subtitle}</p></div><div class="contact-illustration" aria-hidden="true"><span>${icon}</span><i></i><i></i><i></i></div></div>`;
+  }
+
+  function feedback(){
+    const user=getActiveUser() || {};
+    return html`
+      ${contactHero('Feedback & Suggestions', 'Send comments, problems, corrections, feature requests and educational suggestions about DigiHealth Lab. The form prepares an email directly to the platform designer.', '💬')}
+      <div class="contact-layout">
+        <form id="feedbackForm" class="card smart-form">
+          <h3>Send feedback to the designer</h3>
+          <p class="mini">Complete the form and click send. Your email application will open with a prepared message addressed to Motahhareh Khorshidzadeh.</p>
+          <div class="form-grid">
+            <label>Full name<input id="fbName" value="${escapeHtml(user.name || '')}" required></label>
+            <label>Email<input id="fbEmail" type="email" value="${escapeHtml(user.email || '')}" required></label>
+            <label>Role<select id="fbRole"><option>Student</option><option>Instructor</option><option>Health Information Professional</option><option>Medical Records Staff</option><option>Digital Health Learner</option><option>Other</option></select></label>
+            <label>Feedback type<select id="fbType"><option>General suggestion</option><option>Content correction</option><option>Technical issue</option><option>Course improvement</option><option>Quiz question suggestion</option><option>HIS simulation improvement</option></select></label>
+          </div>
+          <label>Subject<input id="fbSubject" placeholder="Example: Suggestion for Medical Coding Lab" required></label>
+          <label>Message<textarea id="fbMessage" rows="8" placeholder="Write your feedback, suggestion, issue or improvement idea here..." required></textarea></label>
+          <button class="btn" type="submit">Send Feedback by Email</button>
+          <p class="source-note">Email destination: motahhareh.khorshidzadeh@gmail.com</p>
+        </form>
+        <div class="card contact-side-card">
+          <h3>What you can send</h3>
+          <ul class="nice-list"><li>Ideas for new university modules</li><li>Corrections for terminology or coding examples</li><li>Suggestions for HIS workflow scenarios</li><li>Technical bugs or usability issues</li><li>Quiz questions and case-study ideas</li></ul>
+          <div class="email-chip">✉️ motahhareh.khorshidzadeh@gmail.com</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function collaboration(){
+    const user=getActiveUser() || {};
+    return html`
+      ${contactHero('Collaboration Requests', 'This page is designed for specialists, companies, universities and training centers that want to discuss academic, research, product, HIS simulation or digital health collaboration.', '🤝')}
+      <div class="contact-layout">
+        <form id="collabForm" class="card smart-form">
+          <h3>Send a collaboration proposal</h3>
+          <p class="mini">Use this form for partnership ideas, university pilots, specialist contribution, content development, research collaboration or digital health training proposals.</p>
+          <div class="form-grid">
+            <label>Your name<input id="coName" value="${escapeHtml(user.name || '')}" required></label>
+            <label>Email<input id="coEmail" type="email" value="${escapeHtml(user.email || '')}" required></label>
+            <label>Organization / University / Company<input id="coOrg" placeholder="Organization name" required></label>
+            <label>Collaboration type<select id="coType"><option>University pilot</option><option>Specialist content contribution</option><option>HIS/EMR simulation partnership</option><option>Digital health training</option><option>Research collaboration</option><option>Company partnership</option><option>Other</option></select></label>
+          </div>
+          <label>Area of interest<select id="coArea"><option>Medical Terminology</option><option>Medical Coding</option><option>HIS / EMR Workflow</option><option>Digital Health</option><option>Telehealth and mHealth</option><option>Privacy and Data Quality</option><option>Healthcare AI</option><option>University Curriculum</option></select></label>
+          <label>Proposal details<textarea id="coMessage" rows="8" placeholder="Describe your collaboration idea, expected role, target users, timeline and contact details..." required></textarea></label>
+          <button class="btn" type="submit">Send Collaboration Request</button>
+          <p class="source-note">Email destination: motahhareh.khorshidzadeh@gmail.com</p>
+        </form>
+        <div class="card contact-side-card collaboration-card">
+          <h3>Collaboration opportunities</h3>
+          <div class="opportunity-grid"><span>🏫 University training</span><span>🏥 HIS workflow design</span><span>🧾 Medical coding cases</span><span>📊 Data quality education</span><span>🔐 Privacy modules</span><span>🤖 Healthcare AI review</span></div>
+          <p class="mini">Specialists, companies and universities can propose cooperation to develop case studies, academic content, simulation workflows or institutional training versions.</p>
+        </div>
+      </div>
+    `;
+  }
+
+
+  function hisGuide(){
+    const areas = [
+      {
+        id:'overview', title:'1. HIS definition, purpose and scope', icon:'🏥', badge:'Foundation',
+        summary:'Hospital Information System (HIS) is the integrated digital environment that supports administrative, clinical, financial, diagnostic and management workflows across a healthcare facility. It is not just one screen; it is a connected ecosystem of patient registration, ADT, EMR/EHR, orders, pharmacy, laboratory, radiology, billing, reporting, security and interoperability tools.',
+        points:['Define the facility type: clinic, day care center, specialty hospital, general hospital, teaching hospital, group hospital or public health network.','Clarify whether the organization needs a full enterprise HIS, a modular EHR/EMR, a billing-focused system, or an integrated hospital platform.','Start with real workflows: patient arrival, registration, triage, physician visit, admission, orders, diagnostics, pharmacy, procedures, discharge, coding, billing and reporting.','Use fictional workflow maps during planning, then validate them with real clinical and administrative users before procurement.'],
+        checklist:['Approved digital health vision','Current-state workflow map','List of departments and services','Patient journey map','High-level budget range','Decision committee and project owner'],
+        output:'A written HIS scope statement and project charter that explains why the facility needs the system and what business, clinical and reporting problems it must solve.'
+      },
+      {
+        id:'architecture', title:'2. HIS structure, modules and system design', icon:'🧩', badge:'System design',
+        summary:'A strong HIS design is modular, role-based, interoperable and scalable. Each department should have the screens it needs, while the patient record remains connected through one patient identifier and controlled access.',
+        points:['Core administrative modules: Master Patient Index, registration, appointment, ADT, bed management, insurance, billing and cashier.','Clinical modules: EMR documentation, problem list, diagnosis, progress notes, nursing notes, medication administration record, discharge summary and clinical decision support.','Diagnostic and service modules: LIS, RIS/PACS, pharmacy, operating room, anesthesia, blood bank, dietetics, physiotherapy and emergency.','Management modules: coding, medical records/HIM, audit, hospital statistics, dashboards, quality indicators, user management and audit logs.','Integration layer: interface engine, APIs, HL7/FHIR exchange, terminology mapping, data warehouse and reporting database.'],
+        checklist:['Module list by department','User-role matrix','Patient identifier strategy','Department workflow diagrams','Integration map','Reporting and dashboard requirements'],
+        output:'A HIS architecture blueprint showing modules, departments, users, data flow, integrations and reporting outputs.'
+      },
+      {
+        id:'readiness', title:'3. Facility readiness before buying HIS', icon:'📋', badge:'Preparation',
+        summary:'Many HIS projects fail because the organization buys software before understanding its processes, data quality, infrastructure and change readiness. Readiness work should happen before the RFP or vendor demo.',
+        points:['Check network, devices, server/cloud readiness, backup, cybersecurity, user accounts and internet reliability.','Review patient registration quality, duplicate records, paper forms, coding practice, reporting needs and medical record workflows.','Identify department champions from clinical, nursing, pharmacy, lab, radiology, billing, HIM, IT and administration.','Decide whether to digitize all workflows at once or phase implementation by departments and modules.'],
+        checklist:['Infrastructure assessment','Data migration inventory','Paper form inventory','Department readiness checklist','Training needs analysis','Risk register'],
+        output:'A readiness report that tells leadership what must be fixed before signing a HIS contract.'
+      },
+      {
+        id:'procurement', title:'4. HIS procurement, RFI/RFP and vendor selection', icon:'🛒', badge:'Procurement',
+        summary:'Procurement should be evidence-based. The facility should compare vendors using documented requirements, demos, reference checks, technical review, security review and total cost of ownership, not only price or sales presentation.',
+        points:['Start with RFI if the market is unclear; use RFP when requirements, scoring rules and evaluation criteria are ready.','Request functional requirements by module, not only generic product brochures.','Ask vendors to demonstrate real workflows: registration, admission, order entry, lab result, pharmacy safety, discharge, billing, coding, reporting and audit log.','Score usability, interoperability, security, implementation support, local regulatory fit, reporting capability, references, SLA and long-term cost.','Require a sandbox/demo environment and written answers to all requirements.'],
+        checklist:['RFI/RFP document','Requirements matrix','Demo script','Scoring sheet','Vendor reference questionnaire','Total cost of ownership worksheet'],
+        output:'A transparent vendor comparison report and procurement recommendation approved by the project committee.'
+      },
+      {
+        id:'contract', title:'5. Contract, SLA and legal/operational safeguards', icon:'🧾', badge:'Contracting',
+        summary:'The HIS contract must protect the healthcare organization. It should clearly define deliverables, implementation scope, payment milestones, support obligations, data ownership, security, uptime, customization, training and exit plan.',
+        points:['Define modules, users, facilities, interfaces, reports, migration scope, training days and go-live support.','Include service-level agreement terms for response time, resolution time, uptime, backup, disaster recovery and escalation.','Clarify data ownership, database access, export rights, exit support, audit logs and confidentiality responsibilities.','Avoid vague customization promises; write each customization as a deliverable with acceptance criteria.','Use milestone-based payments linked to validated delivery, testing, training and go-live acceptance.'],
+        checklist:['Scope of work','Acceptance criteria','SLA table','Data ownership clause','Security and privacy obligations','Exit and data export clause'],
+        output:'A contract checklist that reduces vendor lock-in and protects clinical, financial and patient data continuity.'
+      },
+      {
+        id:'implementation', title:'6. HIS implementation and go-live roadmap', icon:'🚀', badge:'Implementation',
+        summary:'Implementation should be phased, tested and clinically validated. The goal is not only installing software, but safely transforming hospital work without losing patient data or disrupting care.',
+        points:['Set governance: steering committee, project manager, module owners, super users and issue escalation path.','Configure master data: departments, wards, beds, doctors, services, tariffs, forms, order sets, user roles and permissions.','Pilot workflows in a controlled area before full go-live.','Run user acceptance testing with real workflow scenarios and fictional patient records.','Prepare go-live command center, downtime procedure, support rota and issue log.'],
+        checklist:['Implementation plan','Configuration workbook','Training plan','UAT scripts','Data migration validation','Go-live checklist'],
+        output:'A phased go-live plan with signed UAT, trained users, validated data and documented support coverage.'
+      },
+      {
+        id:'upgrade', title:'7. Maintenance, support, upgrades and continuous improvement', icon:'🛠️', badge:'Support',
+        summary:'HIS work continues after go-live. A professional health facility needs structured support, change control, upgrade testing, training refreshers, performance monitoring and regular data-quality review.',
+        points:['Define first-line support, vendor support, escalation path and issue categories.','Use change request forms for new reports, new forms, workflow changes and module configuration.','Test upgrades in a staging environment before production.','Monitor system uptime, response time, unresolved tickets, user satisfaction, training gaps and data-quality indicators.','Review access rights and audit logs periodically.'],
+        checklist:['Support model','Ticket categories','Change request process','Upgrade testing checklist','Data-quality dashboard','Access review schedule'],
+        output:'A post-go-live operating model that keeps the HIS safe, reliable and aligned with hospital operations.'
+      },
+      {
+        id:'companies', title:'8. HIS companies, platforms and market options', icon:'🏢', badge:'Vendor landscape',
+        summary:'This directory is for orientation only and is not an endorsement. Health facilities should compare vendors against their own requirements, country regulations, budget, language, implementation support and integration needs.',
+        points:['Large enterprise hospital platforms: Epic, Oracle Health, MEDITECH, InterSystems TrakCare, Dedalus, Altera Digital Health and other regional enterprise vendors.','Open-source or lower-cost options: OpenMRS, OpenEMR, GNU Health, Bahmni and DHIS2 for relevant health information or public health use cases.','Specialized systems may still be required for laboratory, radiology/PACS, pharmacy automation, telehealth, billing, claims or data warehouse.','Before choosing, ask for local references, live demonstrations, implementation team qualifications and integration examples.'],
+        checklist:['Vendor profile','Local/regional references','Modules offered','Integration capability','Implementation capacity','Support availability'],
+        output:'A shortlisted vendor directory with strengths, risks, required integrations and reference-check notes.'
+      },
+      {
+        id:'security', title:'9. Security, privacy, data governance and interoperability', icon:'🔐', badge:'Governance',
+        summary:'HIS selection must include security, privacy and interoperability from the beginning. These are not optional technical extras; they affect patient safety, confidentiality, reporting, continuity of care and legal compliance.',
+        points:['Use role-based access control, strong authentication, audit logs, session management and least-privilege access.','Define backup, disaster recovery, downtime procedure and cyber incident response.','Require interoperable data exchange through appropriate standards such as HL7/FHIR where relevant.','Use standardized terminologies and coding systems where the country, facility or payer requires them.','Define data governance: data ownership, stewardship, validation, correction, reporting and archival.'],
+        checklist:['Security requirements','Privacy impact review','Interoperability requirements','Audit log review process','Data dictionary','Backup and DR test evidence'],
+        output:'A governance and security checklist that must be passed before contract signing and again before go-live.'
+      },
+      {
+        id:'scorecard', title:'10. Decision scorecard for choosing a HIS vendor', icon:'📊', badge:'Selection tool',
+        summary:'Use a weighted scorecard so the decision is consistent and defensible. The cheapest system may become expensive if it fails to support workflow, reporting, interoperability, training or long-term support.',
+        points:['Functional fit - Does it support actual hospital workflows?','Clinical safety - Does it reduce risk and improve documentation?','Interoperability - Can it exchange data with LIS, RIS/PACS, pharmacy, billing and national platforms?','Usability - Can doctors, nurses, registration, coders and administrators use it efficiently?','Security and compliance - Does it meet privacy, access and audit requirements?','Implementation strength - Does the vendor have a proven team, plan and references?','Total cost - Include licenses, hosting, interfaces, hardware, training, support, customization and upgrades.'],
+        checklist:['Weighted criteria','Demo score','Technical score','Security score','Reference score','Total cost score'],
+        output:'A final HIS vendor selection scorecard with documented reasons for the chosen option.'
+      }
+    ];
+    const selected = state.hisArea || 'Select HIS guide area';
+    const active = areas.find(a=>a.title===selected);
+    const companies = [
+      ['Epic','Enterprise EHR/HIS ecosystem','https://www.epic.com/'],
+      ['Oracle Health','Enterprise clinical and administrative health IT','https://www.oracle.com/health/'],
+      ['MEDITECH','EHR and hospital information platform','https://ehr.meditech.com/'],
+      ['InterSystems TrakCare','Unified healthcare information system','https://www.intersystems.com/products/trakcare/'],
+      ['Dedalus','Healthcare and diagnostic information systems','https://www.dedalus.com/'],
+      ['Altera Digital Health','EHR and healthcare IT solutions','https://www.alterahealth.com/'],
+      ['OpenMRS','Open-source medical record system','https://openmrs.org/'],
+      ['OpenEMR','Open-source EHR and practice management','https://www.open-emr.org/'],
+      ['GNU Health','Free health and hospital information system project','https://www.gnuhealth.org/'],
+      ['Bahmni','Open-source hospital management and EMR distribution','https://www.bahmni.org/'],
+      ['DHIS2','Open-source health information management platform','https://dhis2.org/']
+    ];
+    return html`
+      <div class="card his-hero-card">
+        <div class="his-hero-copy">
+          <span class="pill success">Professional HIS Guide</span>
+          <h3>Hospital Information System Selection, Implementation and Support Guide</h3>
+          <p>This section is designed for health information specialists, hospital managers, health IT teams, clinics and healthcare organizations that want to understand HIS, evaluate vendors, prepare an RFP, sign a safer contract and implement the system with fewer workflow, data-quality and support problems.</p>
+        </div>
+        <div class="his-hero-visual" aria-hidden="true"><span>🏥</span><b>HIS</b><small>Strategy • Procurement • Implementation</small></div>
+      </div>
+      <div class="card">
+        <div class="section-title" style="margin-top:0"><div><h3>Choose HIS guide area</h3><p>Select one area to open detailed guidance, checklists and expected outputs.</p></div><span class="pill">Decision support</span></div>
+        <div class="field"><label>Guide area</label><select id="hisArea"><option>Select HIS guide area</option>${areas.map(a=>`<option ${selected===a.title?'selected':''}>${escapeHtml(a.title)}</option>`).join('')}</select></div>
+        ${!active?`<div class="his-overview-grid">${areas.map(a=>`<article class="his-topic-card"><div class="his-topic-icon">${a.icon}</div><div><span class="pill light">${escapeHtml(a.badge)}</span><h4>${escapeHtml(a.title)}</h4><p>${escapeHtml(a.summary.slice(0,170))}...</p></div></article>`).join('')}</div>`:''}
+      </div>
+      ${active?`<div class="card his-detail-card"><div class="section-title" style="margin-top:0"><div><h3>${active.icon} ${escapeHtml(active.title)}</h3><p>${escapeHtml(active.summary)}</p></div><span class="pill success">${escapeHtml(active.badge)}</span></div><div class="grid cols-2"><div class="his-panel"><h4>Professional guidance</h4>${listMini(active.points)}</div><div class="his-panel"><h4>Checklist before decision</h4>${listMini(active.checklist)}<div class="expected-output"><strong>Expected output:</strong><p>${escapeHtml(active.output)}</p></div></div></div></div>`:''}
+      <div class="card">
+        <div class="section-title" style="margin-top:0"><div><h3>HIS procurement workflow</h3><p>Use this process before signing with a HIS company.</p></div></div>
+        <div class="his-roadmap">
+          ${['Need assessment','Workflow mapping','RFI / market scan','RFP and requirements','Vendor demo and scoring','Security and interoperability review','Contract and SLA','Implementation planning','Pilot and UAT','Go-live and hypercare','Support and upgrade governance'].map((x,i)=>`<div class="his-roadmap-step"><b>${i+1}</b><span>${escapeHtml(x)}</span></div>`).join('')}
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-title" style="margin-top:0"><div><h3>Companies and platform examples</h3><p>Examples only. Always verify local availability, references, legal compliance, implementation capacity and total cost before procurement.</p></div></div>
+        <div class="vendor-grid">${companies.map(c=>`<article class="vendor-card"><h4>${escapeHtml(c[0])}</h4><p>${escapeHtml(c[1])}</p><a class="btn outline small" href="${c[2]}" target="_blank" rel="noopener noreferrer">Open official website</a></article>`).join('')}</div>
+      </div>
+      <div class="card">
+        <h3>What a health facility should request from a HIS vendor</h3>
+        <div class="grid cols-3">
+          <div class="his-panel"><h4>Functional proof</h4>${listMini(['Live workflow demo','Module-by-module requirement response','Role-based screens','Reports and dashboards','Medical records and coding support'])}</div>
+          <div class="his-panel"><h4>Technical proof</h4>${listMini(['Architecture diagram','Integration method','API/FHIR/HL7 capability','Backup and disaster recovery','Security and audit logs'])}</div>
+          <div class="his-panel"><h4>Operational proof</h4>${listMini(['Implementation team CVs','Training plan','SLA and ticket process','Upgrade policy','Reference sites and site visit'])}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindHISGuide(){
+    $('hisArea')?.addEventListener('change',()=>{state.hisArea=$('hisArea').value; saveState(); render();});
+  }
+
+  function terminology(){
+    const cats = [...new Set(terms.map(t=>t[4] || 'General'))].sort();
+    const selectedCategory = state.termCategory || '';
+    return html`
+      <div class="card">
+        <div class="section-title" style="margin-top:0"><div><h3>Medical, Health Technology & Digital Health Terminology Dictionary</h3><p>Select one category first. Terms are not displayed all together so the page stays clean and students study by subject area.</p></div><span class="pill success">Alphabetical dictionary</span></div>
+        <div class="term-toolbar">
+          <select id="termCategory"><option value="">Choose a terminology category...</option>${cats.map(c=>`<option ${c===selectedCategory?'selected':''}>${c}</option>`).join('')}</select>
+          <input id="termSearch" placeholder="Optional search inside selected category..." ${selectedCategory?'':'disabled'}/>
+          <button class="btn outline" id="clearSearch">Clear</button>
+        </div>
+        <div class="dictionary-note"><strong>Academic note:</strong> Choose a category such as medical terminology, diseases, procedures, codes, drug terms, HIS/EMR or digital health before searching. This prevents showing all categories at once.</div>
+        <div id="termStats" class="term-stats"></div>
+        <div id="termResults" class="grid cols-2"></div>
+      </div>
+    `;
+  }
+
+  function ensureHisState(){
+    if(!state.completedSteps || !Array.isArray(state.completedSteps)) state.completedSteps = [];
+    if(state.completedSteps.includes('Registration') && !state.completedSteps.includes('Patient Arrival & Registration')) state.completedSteps = ['Patient Arrival & Registration', ...state.completedSteps.filter(x=>x!=='Registration')];
+    if(!state.his) state.his = {};
+    if(!state.his.outcome) state.his.outcome = 'Discharge';
+    if(!state.his.stageNotes) state.his.stageNotes = {};
+    if(!state.his.triage) state.his.triage = {level:'Urgent', vitals:'BP 128/82, HR 96, Temp 38.4°C, SpO2 94%', priority:'Needs physician review'};
+    if(!state.his.death) state.his.death = {pronouncedBy:'', pronouncedAt:'', immediate:'', intermediate:'', underlying:'', contributing:'', bodyRelease:'Pending'};
+    if(!state.his.transfer) state.his.transfer = {destination:'', reason:'', referralNote:''};
+    if(!state.his.dischargePlan) state.his.dischargePlan = {type:'Home discharge', followup:'Clinic follow-up in 1 week', education:'Medication use, warning signs and follow-up instructions provided'};
+    if(!state.his.selectedRole) state.his.selectedRole = 'Registration Clerk';
+    if(!state.his.route) state.his.route = 'Emergency observation';
+    if(!state.his.selectedForm) state.his.selectedForm = 'patient_registration';
+    if(!state.his.forms) state.his.forms = {};
+    return state.his;
+  }
+
+
+  const roleFormAccess = {
+    'Patient / Guardian':['patient_registration','general_consent','surgical_consent'],
+    'Registration Clerk':['patient_registration','general_consent','admission_order','billing_clearance'],
+    'Triage Nurse':['triage_assessment'],
+    'Physician':['history_physical','physician_orders','admission_order','consult_note','progress_note','discharge_summary','death_documentation','coding_query'],
+    'Emergency Observation Nurse':['nursing_admission','pharmacy_medication','progress_note','lab_request_result','radiology_request_report'],
+    'Ward Nurse':['nursing_admission','pharmacy_medication','progress_note','general_consent','lab_request_result','radiology_request_report'],
+    'Laboratory Staff':['lab_request_result'],
+    'Radiology Staff':['radiology_request_report'],
+    'Pharmacist':['pharmacy_medication'],
+    'Surgeon / Procedure Provider':['surgical_consent','surgical_checklist','operative_report','physician_orders','coding_query'],
+    'Anesthesiologist':['anesthesia_recovery','surgical_checklist'],
+    'OR / Recovery Nurse':['surgical_checklist','anesthesia_recovery','progress_note'],
+    'Discharge Clerk':['discharge_summary','billing_clearance','audit_deficiency'],
+    'Billing / Insurance Officer':['billing_clearance','coding_query','discharge_summary'],
+    'Medical Records Receiving Officer':['audit_deficiency','discharge_summary','billing_clearance','general_consent','history_physical'],
+    'Quantitative & Qualitative Record Reviewer':['audit_deficiency','history_physical','physician_orders','lab_request_result','radiology_request_report','pharmacy_medication','operative_report','discharge_summary','death_documentation','coding_query'],
+    'Medical Coder':['coding_query','discharge_summary','death_documentation','operative_report','history_physical','lab_request_result','radiology_request_report'],
+    'Archive Officer':['audit_deficiency','billing_clearance','discharge_summary','coding_query'],
+    'HIM Manager / Statistics Officer':['audit_deficiency','coding_query','billing_clearance','death_documentation','discharge_summary'],
+    'HIS Admin / Quality Auditor':['patient_registration','admission_order','audit_deficiency','billing_clearance','coding_query']
+  };
+
+  function formsForRole(role){
+    const ids = roleFormAccess[role] || [];
+    const byFormalRole = medicalRecordForms.filter(f => (f.access||[]).includes(role) || (f.responsible||[]).includes(role) || (f.signer||[]).includes(role));
+    const byMappedId = medicalRecordForms.filter(f => ids.includes(f.id));
+    const merged = [...byFormalRole, ...byMappedId];
+    return merged.filter((f,i,a)=>a.findIndex(x=>x.id===f.id)===i);
+  }
+  function formCompletion(form){ const his=ensureHisState(); const data=his.forms[form.id] || {}; const required=(form.fields||[]).filter(f=>f[2]); const filled=required.filter(f=>String(data[f[0]]||'').trim()).length; return {filled,total:required.length,score:required.length?Math.round((filled/required.length)*100):100, missing:required.filter(f=>!String(data[f[0]]||'').trim()).map(f=>f[1])}; }
+  function defaultFormValue(key){ const p=state.patient||{}, n=state.notes||{}; const map={patientId:p.patientId,fullName:p.name,dob:p.dob,gender:p.gender,phone:p.phone,address:p.address,emergency:p.emergency,insurance:p.insurance,allergy:p.allergy,patientName:p.name,chiefComplaint:n.chief,hpi:n.history,pmh:n.past,assessment:n.diagnosis,plan:n.treatment,admittingDiagnosis:n.diagnosis,ward:p.ward,bed:p.bed,finalDiagnosis:n.diagnosis,hospitalCourse:n.treatment}; return map[key]||''; }
+  const selectOptionLibrary = {
+    gender:['Male','Female','Intersex','Unknown / not stated'],
+    relationship:['Self','Parent','Spouse','Adult child','Legal guardian','Other authorized representative'],
+    consentScope:['General treatment and nursing care','Emergency treatment only','Telehealth consultation','Surgery / procedure consent','Release / use of health information','Refused / needs clarification'],
+    privacyNotice:['Acknowledged','Explained but not signed','Not yet explained','Patient unable to acknowledge','Guardian acknowledged'],
+    signature:['Electronically signed','Wet signature received','Verbal consent witnessed','Unable to sign','Pending signature'],
+    patientSignature:['Electronically signed','Wet signature received','Verbal consent witnessed','Unable to sign','Pending signature'],
+    providerSignature:['Electronically authenticated','Signed and dated','Pending provider authentication'],
+    physicianSignature:['Electronically authenticated','Signed and dated','Pending physician authentication'],
+    nurseSignature:['Electronically authenticated','Signed and dated','Pending nurse authentication'],
+    auditorSignature:['Electronically authenticated','Signed and dated','Pending auditor authentication'],
+    officerSignature:['Electronically authenticated','Signed and dated','Pending officer authentication'],
+    consultantSignature:['Electronically authenticated','Signed and dated','Pending consultant authentication'],
+    witness:['Witness completed','Witness not required','Witness pending','Second witness required'],
+    triageLevel:['Resuscitation / immediate','Emergent','Urgent','Semi-urgent','Non-urgent'],
+    painScore:['0 - no pain','1-3 mild pain','4-6 moderate pain','7-10 severe pain','Unable to assess'],
+    allergy:['No known allergy','Penicillin allergy','Sulfa allergy','Latex allergy','Food allergy','Allergy unknown','Allergy not documented'],
+    initialAction:['Immediate physician review','Vital signs monitoring','Oxygen therapy started','IV access prepared','Pain management requested','Observation only'],
+    admissionType:['Emergency admission','Elective admission','Day care admission','Transfer-in','Observation admission'],
+    ward:['Emergency Department','Medical Ward','Surgical Ward','Pediatric Ward','Obstetric Ward','ICU','CCU','Isolation Unit'],
+    bed:['Bed assigned','Bed pending','ICU bed requested','Isolation bed requested','Transfer bed requested'],
+    attending:['Attending physician assigned','On-call physician assigned','Consultant assigned','Pending physician assignment'],
+    orderType:['Laboratory order','Radiology order','Medication order','Diet order','Procedure order','Consultation order','Nursing care order','Discharge order'],
+    priority:['Routine','Urgent','STAT / immediate','Timed order','As needed / PRN'],
+    testRequested:['CBC','Electrolytes / renal profile','Liver function test','Blood glucose','HbA1c','Urinalysis','Blood culture','Cardiac enzymes','Coagulation profile','COVID / respiratory panel'],
+    specimen:['Blood','Urine','Sputum','Stool','Tissue','Swab','CSF','Other specimen'],
+    criticalFlag:['Normal / not critical','Abnormal but non-critical','Critical value notified','Critical value pending notification','Result pending'],
+    validatedBy:['Laboratory technologist validated','Pathologist reviewed','Auto-verified by LIS','Pending validation'],
+    studyRequested:['Chest X-ray','CT brain','CT abdomen','MRI','Ultrasound','Mammography','Fluoroscopy','Portable X-ray'],
+    imageStatus:['Requested','Scheduled','Image acquired','Report pending','Reported','Cancelled / not performed'],
+    drugName:['Paracetamol / Acetaminophen','Amoxicillin-clavulanate','Ceftriaxone','Insulin','Metformin','Salbutamol','Omeprazole','Heparin','Morphine','Medication pending review'],
+    doseRouteFreq:['Oral once daily','Oral twice daily','IV once daily','IV every 8 hours','Subcutaneous as ordered','Inhaled as needed','Dose to be clarified'],
+    allergyCheck:['Allergy checked - no alert','Allergy alert present','Allergy not documented','Allergy conflict requires review'],
+    interactionCheck:['No interaction alert','Interaction alert present','Interaction check pending','Pharmacist review required'],
+    dispensingStatus:['Pending pharmacy review','Dispensed','Partially dispensed','Held','Cancelled','Medication unavailable'],
+    specialty:['Cardiology','Neurology','Infectious Disease','General Surgery','Anesthesia','Psychiatry','Nutrition','Physiotherapy','Endocrinology','Nephrology'],
+    communicatedTo:['Treating physician informed','Nurse informed','Documented in EMR only','Pending communication','Not applicable'],
+    procedureName:['Appendectomy','Cholecystectomy','Cesarean section','Endoscopy','Colonoscopy','Wound debridement','Central line insertion','Other procedure'],
+    siteLaterality:['Right','Left','Bilateral','Midline','Not applicable','Site/laterality needs clarification'],
+    patientQuestions:['Questions answered','No questions asked','Patient requested more explanation','Interpreter required','Not applicable'],
+    signIn:['Completed','Not completed','Not applicable','Requires correction'],
+    timeOut:['Completed','Not completed','Not applicable','Requires correction'],
+    signOut:['Completed','Not completed','Not applicable','Requires correction'],
+    specimenLabel:['Confirmed','Not applicable','Specimen label missing','Requires correction'],
+    countComplete:['Count correct','Count discrepancy','Not applicable','Pending confirmation'],
+    teamConcerns:['No concerns documented','Concerns documented','Pending team review','Not applicable'],
+    anesthesiaType:['General anesthesia','Regional anesthesia','Local anesthesia','Sedation','No anesthesia','To be determined'],
+    preAnesthesiaAssessment:['Completed','Pending','Not applicable','Requires anesthesiologist review'],
+    intraOpMonitoring:['Stable','Unstable event documented','Monitoring ongoing','Not applicable'],
+    recoveryCondition:['Stable in recovery','Requires close monitoring','Transferred to ICU','Discharged from recovery','Pending assessment'],
+    postOpOrders:['Post-operative orders written','No post-operative orders needed','Orders pending','Clarification required'],
+    conditionDischarge:['Stable','Improved','Transferred','Left against medical advice','Expired','Follow-up required'],
+    bodyRelease:['Pending','Released to family','Released to mortuary','Coroner / medico-legal hold','Transfer to another facility'],
+    recordStatus:['Complete','Incomplete - minor deficiency','Incomplete - major deficiency','Not ready for coding','Ready for archive'],
+    responsibleUnit:['Physician','Nursing Unit','Laboratory','Radiology','Pharmacy','Operating Room','Medical Records','Billing / Insurance'],
+    riskLevel:['Low','Moderate','High','Critical'],
+    coverageStatus:['Eligible / approved','Pending approval','Not covered','Self-pay','Insurance clarification required'],
+    chargesReviewed:['Reviewed and matched','Pending review','Discrepancy found','Requires correction'],
+    claimStatus:['Ready to submit','Submitted','Pending coding','Rejected / needs correction','Patient self-pay'],
+    finalAction:['Code assigned','Query sent','Awaiting physician response','Code revised','No coding action required']
+  };
+  function inferOptions(key,label){
+    if(selectOptionLibrary[key]) return selectOptionLibrary[key];
+    const l=(label||'').toLowerCase();
+    if(l.includes('signature') || l.includes('authenticated')) return ['Electronically authenticated','Signed and dated','Pending signature','Not applicable'];
+    if(l.includes('status')) return ['Completed','Pending','In progress','Cancelled','Not applicable'];
+    if(l.includes('type')) return ['Routine','Urgent','Emergency','Elective','Not applicable'];
+    if(l.includes('level')) return ['Low','Moderate','High','Critical','Not assessed'];
+    if(l.includes('check') || l.includes('confirmed') || l.includes('acknowledged') || l.includes('completed')) return ['Yes / completed','No / not completed','Pending','Not applicable'];
+    return null;
+  }
+  function needsLongText(key,label){
+    return ['hpi','pmh','exam','assessment','plan','orderDetails','indication','clinicalIndication','result','findings','impression','administrationRecord','consultReason','recommendations','benefitsRisks','preOpDiagnosis','postOpDiagnosis','procedurePerformed','subjective','objective','education','reasonAdmission','finalDiagnosis','hospitalCourse','procedures','followUp','immediateCause','intermediateCause','underlyingCause','contributingConditions','missingItems','queryReason','clinicalIndicators','clarificationNeeded','physicianResponse','codingSummary','patientBalance','careNeeds','arrivalCondition','skinAssessment','patientEducation'].includes(key);
+  }
+  function medicalFormFieldControl(f,form,data){
+    const [key,label,required]=f; const value=String(data[key] || defaultFormValue(key) || ''); const req=required?'<b>*</b>':'';
+    const options=inferOptions(key,label);
+    if(options && !needsLongText(key,label)){
+      const opts=['',...options].map(o=>`<option value="${escapeHtml(o)}" ${o===value?'selected':''}>${o||'Select '+escapeHtml(label)}</option>`).join('');
+      return `<label class="paper-field"><span>${escapeHtml(label)} ${req}</span><select data-med-form-field="${escapeHtml(key)}">${opts}</select></label>`;
+    }
+    if(needsLongText(key,label)){
+      return `<label class="paper-field wide"><span>${escapeHtml(label)} ${req}</span><textarea data-med-form-field="${escapeHtml(key)}" placeholder="Write the required clinical / administrative details">${escapeHtml(value)}</textarea></label>`;
+    }
+    if(key==='dob' || key.toLowerCase().includes('date')) return `<label class="paper-field"><span>${escapeHtml(label)} ${req}</span><input type="date" data-med-form-field="${escapeHtml(key)}" value="${escapeHtml(value)}"/></label>`;
+    if(key.toLowerCase().includes('time')) return `<label class="paper-field"><span>${escapeHtml(label)} ${req}</span><input type="text" data-med-form-field="${escapeHtml(key)}" value="${escapeHtml(value)}" placeholder="Date / time or system timestamp"/></label>`;
+    return `<label class="paper-field"><span>${escapeHtml(label)} ${req}</span><input data-med-form-field="${escapeHtml(key)}" value="${escapeHtml(value)}" placeholder="Enter ${escapeHtml(label)}"/></label>`;
+  }
+
+  const hisProcessRoute = [
+    {no:1, stage:'Patient arrival / reception', owner:'Registration Clerk', action:'Register patient as outpatient visit or emergency/inpatient candidate.', destination:'Triage or outpatient physician visit', forms:['Patient Registration & Identification Form','General Consent when needed']},
+    {no:2, stage:'Triage referral', owner:'Triage Nurse', action:'Complete initial assessment, priority level, vital signs and allergy alert.', destination:'Physician visit', forms:['Emergency Triage & Initial Assessment']},
+    {no:3, stage:'Physician visit', owner:'Physician', action:'Assess patient, document H&P or visit note, request medication, laboratory, radiology, observation, ward admission, surgery, transfer or discharge.', destination:'Outpatient completion, emergency observation, admission office, paraclinic or OR', forms:['Medical History & Physical Examination','Practitioner Orders / CPOE']},
+    {no:4, stage:'Admission order / referral back to registration', owner:'Physician → Registration Clerk', action:'If temporary emergency admission or ward admission is ordered, registration completes admission record and checks bed availability.', destination:'Emergency observation bed or inpatient ward bed', forms:['Admission Order & Bed Assignment']},
+    {no:5, stage:'Bed assignment', owner:'Registration Clerk / Bed Management', action:'View empty beds by ward, choose department and assign bed according to physician order.', destination:'Waiting list for emergency observation or ward nurse', forms:['Admission Order & Bed Assignment']},
+    {no:6, stage:'Nurse receives patient', owner:'Emergency Observation Nurse / Ward Nurse', action:'Confirm patient on waiting list, accept admission into selected bed, start nursing admission and view physician orders.', destination:'Treatment and monitoring in emergency observation or ward', forms:['Nursing Admission Assessment','Medication Administration Record','Progress Note']},
+    {no:7, stage:'Orders and paraclinical workflow', owner:'Physician / Nurse / Lab / Radiology / Pharmacy', action:'Orders become visible to laboratory, radiology and pharmacy users; each department completes request, result, report or medication safety status.', destination:'Results attached to EMR and physician/nurse can review', forms:['Laboratory Request & Result','Radiology Request & Imaging Report','Medication Order / MAR']},
+    {no:8, stage:'Ward rounds and continuing care', owner:'Physician / Nurse', action:'Physician enters progress notes and new orders; nurses document patient status, medication administration, education, diet orders and care response.', destination:'Continue care, surgery/procedure, discharge, transfer or death path', forms:['Daily Progress Note / SOAP Note','Practitioner Orders / CPOE','Medication Record']},
+    {no:9, stage:'Surgery / procedure path', owner:'Surgeon / Anesthesiologist / OR Nurse / Recovery Nurse', action:'If ordered, complete surgical consent, safety checklist, anesthesia record, operative report, procedure codes and post-operative recovery status.', destination:'Return to ward or higher-level care', forms:['Surgical Consent','Surgical Safety Checklist','Operative Report','Anesthesia & Recovery Record']},
+    {no:10, stage:'Final clinical outcome', owner:'Physician / Nurse', action:'Set final status as discharge by physician, discharge against medical advice, transfer to another hospital, or death/expired patient.', destination:'Discharge office or death/transfer workflow', forms:['Discharge Summary','Referral Letter logic','Death Documentation']},
+    {no:11, stage:'Discharge office', owner:'Discharge Clerk', action:'Prepare discharge process, check summary, patient education, final documents and route the case to billing/insurance.', destination:'Billing and insurance', forms:['Discharge Summary','Final Clearance']},
+    {no:12, stage:'Billing and insurance', owner:'Billing / Insurance Officer', action:'Finalize financial clearance, claim status, coverage and charges after clinical documentation and coding readiness are checked.', destination:'HIM / Medical Records receiving', forms:['Billing, Insurance & Final Clearance']},
+    {no:13, stage:'Medical record receiving', owner:'Medical Records Receiving Officer', action:'Receive the completed file, compare electronic record with paper file, accept if complete or return to discharge/ward for deficiencies.', destination:'Quantitative and qualitative review or returned deficiency workflow', forms:['Medical Record Audit & Deficiency Notice']},
+    {no:14, stage:'Quantitative and qualitative review', owner:'Quantitative & Qualitative Record Reviewer', action:'Check completeness, signatures, dates, consistency, diagnosis support, consent, lab/radiology reports, operative notes and discharge summary.', destination:'Medical coding or deficiency correction', forms:['Audit & Deficiency Notice','Coding Query when needed']},
+    {no:15, stage:'Specialized coding', owner:'Medical Coder', action:'Code diagnoses, procedures, surgery and mortality cause sequence when applicable. Send query if documentation is unclear.', destination:'Archive after coding complete', forms:['Coding Query','Death Documentation & Mortality Coding Worksheet']},
+    {no:16, stage:'Archive and statistics', owner:'Archive Officer / HIM Manager', action:'Archive final record and update hospital statistics, bed occupancy, admissions, discharges, deaths, transfers, incomplete records and coding status.', destination:'HIM dashboard and hospital reports', forms:['Final Record Status','Hospital Statistics Dashboard']}
+  ];
+
+  const roleResponsibilities = {
+    'Patient / Guardian':{icon:'🧍', access:'Consent and identification section only', tasks:['Confirm identity information','Sign general consent or surgical consent','Acknowledge privacy and information-use notice'], reports:['Own consent status','Own registration summary']},
+    'Registration Clerk':{icon:'🪪', access:'Registration, admission order, insurance and bed assignment', tasks:['Create or update patient demographic record','Register outpatient/emergency visit','Complete admission when physician orders observation or ward admission','View empty beds and assign bed by ordered ward'], reports:['Patient registration summary','Ward and bed availability','Admission queue']},
+    'Triage Nurse':{icon:'🚑', access:'Triage form and vital-sign section', tasks:['Complete triage assessment','Assign triage level','Record vital signs and allergy alert','Refer patient to physician queue'], reports:['Triage queue','Urgency status']},
+    'Physician':{icon:'🩺', access:'Clinical note, orders, admission decision, discharge/death/transfer documentation', tasks:['Visit patient and document assessment','Order medication, lab, radiology, diet or consultation','Decide simple visit, observation, ward admission, surgery, discharge, transfer or death pathway','Complete discharge summary or death certification when required'], reports:['Clinical chart','Results and reports','Coding query response']},
+    'Emergency Observation Nurse':{icon:'🛌', access:'Emergency observation bed list, nursing notes, orders and MAR', tasks:['Accept patient from admission queue','Place patient in assigned observation bed','View doctor orders','Document medication administration, diet orders, nursing care and progress'], reports:['Observation patient list','Open orders','Medication administration status']},
+    'Ward Nurse':{icon:'🏥', access:'Ward bed list, nursing notes, orders, MAR and patient education', tasks:['Accept ward admission from waiting list','Confirm assigned bed','View orders and results','Document nursing care, medication administration, patient education and status changes'], reports:['Ward census','Open orders','Nursing documentation status']},
+    'Laboratory Staff':{icon:'🧪', access:'Laboratory request and result entry', tasks:['View pending laboratory requests','Record specimen status','Enter and validate results','Flag critical result'], reports:['Pending lab orders','Validated lab results']},
+    'Radiology Staff':{icon:'🩻', access:'Radiology request, image status and imaging report', tasks:['View imaging requests','Update image status','Enter findings and impression','Attach radiologist report to EMR'], reports:['Pending imaging list','Radiology report status']},
+    'Pharmacist':{icon:'💊', access:'Medication order, allergy and interaction review', tasks:['Review medication orders','Check allergy and drug interaction','Update dispensing status','Support medication reconciliation'], reports:['Medication safety alerts','Dispensing report']},
+    'Surgeon / Procedure Provider':{icon:'🔪', access:'Surgical consent, operative report and procedure coding support', tasks:['Confirm procedure indication','Complete operative/procedure report','Document pre-op and post-op diagnosis','Support surgical/procedure coding'], reports:['Operation list','Post-operative summary']},
+    'Anesthesiologist':{icon:'😷', access:'Anesthesia assessment, anesthesia record and recovery status', tasks:['Complete pre-anesthesia assessment','Record anesthesia type and monitoring','Document post-anesthesia recovery concerns'], reports:['Anesthesia record','Recovery handoff']},
+    'OR / Recovery Nurse':{icon:'🏨', access:'Surgical checklist and recovery nursing record', tasks:['Complete safety checklist phases','Confirm counts, specimens and equipment status','Record recovery condition and return-to-ward handoff'], reports:['OR checklist status','Recovery queue']},
+    'Discharge Clerk':{icon:'🚪', access:'Discharge clearance and document handover', tasks:['Check discharge summary and patient education','Prepare discharge file','Route to billing and insurance','Return incomplete file if required'], reports:['Discharge pending list','Files ready for billing']},
+    'Billing / Insurance Officer':{icon:'💳', access:'Billing, insurance, claim status and final clearance', tasks:['Review coverage and claim status','Check coding summary and charges','Finalize patient balance or insurance claim','Send completed record to HIM receiving'], reports:['Billing status','Claim readiness']},
+    'Medical Records Receiving Officer':{icon:'📥', access:'File receiving, paper-electronic matching and deficiency return', tasks:['Receive discharged record','Compare paper file with electronic chart','Accept complete file or return deficient file to discharge/ward','Create deficiency notice'], reports:['Received records','Returned deficiency list']},
+    'Quantitative & Qualitative Record Reviewer':{icon:'✅', access:'Complete clinical record for review', tasks:['Check quantitative completeness','Check qualitative consistency and documentation support','Verify signatures, dates, consents and reports','Prepare record for coding or deficiency correction'], reports:['Completeness score','Deficiency report','Coding readiness']},
+    'Medical Coder':{icon:'🏷️', access:'Final chart, discharge summary, operative report, death documentation and query forms', tasks:['Assign diagnosis codes','Assign procedure/surgery codes','Perform mortality coding when patient expired','Send coding query if documentation is unclear'], reports:['Coding summary','Query status','Mortality coding worksheet']},
+    'Archive Officer':{icon:'🗄️', access:'Final coded record and archive status', tasks:['Receive coded record','Mark record as archived','Maintain retrieval status and final location'], reports:['Archive list','Record retention status']},
+    'HIM Manager / Statistics Officer':{icon:'📊', access:'Hospital statistics, record status and information management dashboard', tasks:['Monitor bed occupancy','Monitor admissions, discharges, deaths and transfers','Track incomplete records and coding pending cases','Generate hospital statistics for management'], reports:['HIM dashboard','Hospital statistics','Quality indicators']},
+    'HIS Admin / Quality Auditor':{icon:'🛡️', access:'System roles, audit logs and quality monitoring', tasks:['Review role-based access','Monitor audit trail','Support data quality and HIS workflow control'], reports:['Access log','Data quality dashboard']}
+  };
+
+  function roleAccessCard(role){
+    const r=roleResponsibilities[role] || roleResponsibilities['Registration Clerk'];
+    return `<div class="role-access-card"><div class="role-icon">${r.icon}</div><div><h3>${escapeHtml(role)}</h3><p><strong>Allowed access:</strong> ${escapeHtml(r.access)}</p><div class="role-list"><strong>Role tasks</strong>${listMini(r.tasks)}</div><div class="role-list"><strong>Reports / views</strong>${listMini(r.reports)}</div></div></div>`;
+  }
+
+  function hisRouteTable(){
+    return `<div class="route-table-wrap"><table class="route-table"><thead><tr><th>#</th><th>Ordered hospital process</th><th>Main user / department</th><th>What must be done</th><th>Next destination</th></tr></thead><tbody>${hisProcessRoute.map((r,i)=>`<tr class="${i===state.activeStep?'active':''}"><td>${r.no}</td><td><strong>${escapeHtml(r.stage)}</strong><small>${r.forms.map(escapeHtml).join(' • ')}</small></td><td>${escapeHtml(r.owner)}</td><td>${escapeHtml(r.action)}</td><td>${escapeHtml(r.destination)}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+
+  function bedManagementPanel(){
+    const wards=[
+      {ward:'Emergency Observation', total:10, occupied:7, empty:3, suggested:'OBS-03'},
+      {ward:'Medical Ward', total:32, occupied:25, empty:7, suggested:'MW-A12'},
+      {ward:'Surgical Ward', total:28, occupied:21, empty:7, suggested:'SW-B07'},
+      {ward:'ICU', total:12, occupied:10, empty:2, suggested:'ICU-02'},
+      {ward:'Pediatrics', total:20, occupied:15, empty:5, suggested:'PED-05'},
+      {ward:'Obstetrics / Gynecology', total:22, occupied:18, empty:4, suggested:'OBG-04'}
+    ];
+    return `<div class="card bed-panel"><div class="section-title" style="margin-top:0"><div><h3>Ward and Bed Availability</h3><p>Registration and bed management can view available beds after the physician selects emergency observation or inpatient admission.</p></div><span class="pill blue">Training census</span></div><div class="bed-grid">${wards.map(w=>`<div class="bed-tile"><strong>${escapeHtml(w.ward)}</strong><span>${w.empty} empty / ${w.total} beds</span><small>Suggested bed: ${escapeHtml(w.suggested)}</small><button class="btn small" data-assign-bed="${escapeHtml(w.ward)}|${escapeHtml(w.suggested)}">Assign</button></div>`).join('')}</div></div>`;
+  }
+
+  function roleQueuePanel(role){
+    const queues={
+      'Registration Clerk':['New emergency arrival waiting for registration','Outpatient visit needs patient identifier check','Physician admission order waiting for bed assignment'],
+      'Triage Nurse':['Registered emergency patient waiting for triage','Patient with allergy alert requires triage note'],
+      'Physician':['Triaged patient waiting for physician visit','Lab and radiology results pending review','Discharge / transfer / death outcome decision required'],
+      'Emergency Observation Nurse':['Observation admission waiting for nurse acceptance','Medication and diet orders waiting for nursing action'],
+      'Ward Nurse':['Patient assigned to ward bed waiting for ward acceptance','Medication administration and progress note due'],
+      'Laboratory Staff':['CBC request pending specimen collection','Critical result flag requires validation'],
+      'Radiology Staff':['Chest X-ray request pending imaging report','Imaging report must be attached to EMR'],
+      'Pharmacist':['Antibiotic order pending allergy check','Medication reconciliation pending'],
+      'Surgeon / Procedure Provider':['Surgical case waiting for consent and operative note','Post-op diagnosis and procedure details required'],
+      'Anesthesiologist':['Pre-anesthesia assessment due','Recovery handoff requires anesthesia record'],
+      'OR / Recovery Nurse':['Surgical safety checklist incomplete','Recovery condition and return-to-ward status pending'],
+      'Discharge Clerk':['Physician discharge summary awaiting discharge file preparation','Discharge documents ready for billing review'],
+      'Billing / Insurance Officer':['Final bill awaiting coding summary','Insurance claim requires documentation clearance'],
+      'Medical Records Receiving Officer':['Discharged file waiting for paper-electronic matching','Incomplete record may need return to discharge department'],
+      'Quantitative & Qualitative Record Reviewer':['Record requires quantitative completeness review','Clinical consistency and coding readiness review pending'],
+      'Medical Coder':['Discharge summary ready for coding','Death case requires mortality coding sequence'],
+      'Archive Officer':['Coded record ready for archive','Archive status pending'],
+      'HIM Manager / Statistics Officer':['Daily census, discharge, death and coding reports ready for review','Incomplete records and bed statistics require monitoring'],
+      'HIS Admin / Quality Auditor':['Role-based access review due','Audit log and data quality status pending'],
+      'Patient / Guardian':['Consent needs signature','Patient education acknowledgement pending']
+    };
+    return `<div class="card queue-card"><h3>Role Work Queue</h3><p class="mini">Tasks shown here change based on the selected user role.</p><div class="queue-list">${(queues[role]||queues['Registration Clerk']).map((q,i)=>`<div><b>${i+1}</b><span>${escapeHtml(q)}</span></div>`).join('')}</div></div>`;
+  }
+
+  function himStatisticsPanel(){
+    const score = auditScore();
+    const bedsTotal=124, bedsOccupied=96, discharged=18, deaths=2, transfers=4, incomplete=state.missingDocs.length, codingPending=12;
+    const occupancy=Math.round((bedsOccupied/bedsTotal)*100);
+    return `<div class="card him-stats-panel"><div class="section-title" style="margin-top:0"><div><h3>Health Information Management Statistics Dashboard</h3><p>HIM users can monitor hospital information after the patient record moves through discharge, billing, medical records review, coding and archive.</p></div><span class="pill success">HIM analytics</span></div><div class="dashboard-metrics compact-stats"><div class="metric-tile"><strong>${bedsTotal}</strong><span>Total beds</span></div><div class="metric-tile"><strong>${occupancy}%</strong><span>Bed occupancy</span></div><div class="metric-tile"><strong>${discharged}</strong><span>Discharges today</span></div><div class="metric-tile"><strong>${deaths}</strong><span>Deaths today</span></div><div class="metric-tile"><strong>${transfers}</strong><span>Transfers</span></div><div class="metric-tile"><strong>${incomplete}</strong><span>Open deficiencies</span></div><div class="metric-tile"><strong>${codingPending}</strong><span>Coding pending</span></div><div class="metric-tile"><strong>${score}%</strong><span>Record completeness</span></div></div><div class="him-flow-note"><strong>HIM output:</strong> accepted records, returned deficiency cases, quantitative and qualitative review results, coding readiness, mortality statistics, archive status, bed occupancy, admissions, discharges, transfers, deaths and incomplete chart indicators.</div></div>`;
+  }
+
+  function roleBasedFormsWorkspace(){
+    const his=ensureHisState();
+    const role=his.selectedRole || 'Registration Clerk';
+    let available=formsForRole(role);
+    if(!available.length) available=medicalRecordForms.slice(0,3);
+    if(!available.find(f=>f.id===his.selectedForm)) his.selectedForm=available[0].id;
+    const form=available.find(f=>f.id===his.selectedForm)||available[0];
+    const c=formCompletion(form);
+    const data=his.forms[form.id]||{};
+    return `<div class="card role-access-panel" style="margin-top:18px">
+      <div class="section-title" style="margin-top:0">
+        <div><h3>Available Medical Forms for Selected User</h3><p>Only the forms and chart sections related to the selected role are opened. Most fields use selectable options; narrative fields remain open text for clinical explanation.</p></div>
+        <span class="pill blue">${available.length} accessible forms</span>
+      </div>
+      <div class="role-selector-grid form-only-grid">
+        <div class="field"><label>Available medical form</label><select id="hisFormSelect">${available.map(f=>`<option value="${f.id}" ${f.id===form.id?'selected':''}>${f.title}</option>`).join('')}</select></div>
+        <div class="form-score-box"><strong>${c.score}%</strong><span>required fields complete</span></div>
+      </div>
+      <div class="paper-form-shell">
+        <div class="paper-form-header"><div><small>DigiHealth Lab • Fictional Medical Record • Paper-form style</small><h3>${form.title}</h3><p>${form.category} • Workflow stage: ${form.step}</p></div><span class="pill ${c.score>=90?'success':c.score>=60?'warning':'danger'}">${c.score}% complete</span></div>
+        <div class="form-meta-grid"><div><strong>Responsible to complete</strong>${listMini(form.responsible)}</div><div><strong>Allowed access / chart view</strong>${listMini(form.access)}</div><div><strong>Signature / authentication needed</strong>${listMini(form.signer)}</div></div>
+        <div class="paper-form-fields">${form.fields.map(f=>medicalFormFieldControl(f,form,data)).join('')}</div>
+        <div class="form-audit-output ${c.score>=90?'ok':c.score>=60?'warn':'bad'}"><strong>Visible output</strong><p>${c.score>=90?'This form is complete enough for the simulated chart and can support the next workflow step, audit, coding or archive.':'Missing required fields: '+(c.missing.join(', ')||'None')+'. Complete these fields before the form can move forward in the patient journey.'}</p></div>
+        <p class="source-note"><strong>Specialized source logic:</strong> ${form.source}</p>
+        <button class="btn" id="saveMedicalForm" style="margin-top:12px">Save This Medical Form</button>
+      </div>
+    </div>`;
+  }
+
+  function simulator(){
+    const his = ensureHisState();
+    const role = his.selectedRole || 'Registration Clerk';
+    const completePct = Math.round((doneCount()/steps.length)*100);
+    const roleInfo = roleResponsibilities[role] || roleResponsibilities['Registration Clerk'];
+    return html`
+      <div class="his-sim-hero card redesigned-his-hero">
+        <div>
+          <span class="pill success">Role-Based HIS Patient Journey</span>
+          <h3>HIS Simulation Lab</h3>
+          <p>Select the user role first. The simulator then opens only the medical-record forms, reports, queues and actions that match that user’s responsibility in the hospital workflow.</p>
+        </div>
+        <div class="his-progress-ring"><strong>${completePct}%</strong><span>${doneCount()} / ${steps.length} steps</span></div>
+      </div>
+
+      <div class="card role-entry-card">
+        <div class="section-title" style="margin-top:0">
+          <div><h3>1. Select HIS User Type</h3><p>The workflow starts with role selection. Each user sees a different work queue, form set and chart access level.</p></div>
+          <span class="pill blue">Required first step</span>
+        </div>
+        <div class="role-entry-grid">
+          <div class="field"><label>I am using the HIS as</label><select id="hisRoleSelect">${hisUserRoles.map(r=>`<option ${r===role?'selected':''}>${r}</option>`).join('')}</select></div>
+          <div class="field"><label>Current patient route</label><select id="hisOutcomeRoute">${['Outpatient simple visit','Emergency observation','Inpatient ward admission','Surgery / procedure path','Discharge by physician','Discharge against medical advice','Transfer to another hospital','Death / expired patient'].map(o=>`<option ${o===his.route?'selected':''}>${o}</option>`).join('')}</select></div>
+          <div class="form-score-box"><strong>${roleInfo.icon}</strong><span>${escapeHtml(role)}</span></div>
+        </div>
+        ${roleAccessCard(role)}
+      </div>
+
+      <div class="sim-layout-2">
+        <div>
+          <div class="card patient-flow-card">
+            <div class="section-title" style="margin-top:0">
+              <div><h3>2. Required Patient Route in Order</h3><p>The patient journey follows the sequence you described: registration, triage, physician visit, admission decision, bed assignment, nursing acceptance, orders, paraclinical response, surgery if needed, discharge/transfer/death, billing, HIM review, coding and archive.</p></div>
+              <span class="pill success">Ordered workflow</span>
+            </div>
+            ${hisRouteTable()}
+            <div class="flow-action-row">
+              <button class="btn" id="completeStep">Complete Current Workflow Step</button>
+              <button class="btn outline" id="resetHisProcess">Reset HIS Process</button>
+            </div>
+          </div>
+          ${roleBasedFormsWorkspace()}
+          ${['Registration Clerk','Physician','Emergency Observation Nurse','Ward Nurse','HIM Manager / Statistics Officer','HIS Admin / Quality Auditor'].includes(role)?bedManagementPanel():''}
+          ${['HIM Manager / Statistics Officer','Medical Records Receiving Officer','Quantitative & Qualitative Record Reviewer','Medical Coder','Archive Officer','HIS Admin / Quality Auditor'].includes(role)?himStatisticsPanel():''}
+        </div>
+        <aside class="his-side-panel">
+          <div class="patient-card sticky-patient">
+            <h4>Fictional Patient Case</h4>
+            ${patientRows()}
+            <div class="outcome-box"><strong>Current outcome path</strong><span class="pill ${his.outcome==='Death'?'danger':his.outcome==='Transfer'?'warning':'success'}">${his.outcome}</span></div>
+            <button class="btn" id="newPatient" style="width:100%;margin-top:14px">Create New Training Patient</button>
+          </div>
+          ${roleQueuePanel(role)}
+          <div class="card role-reports-card"><h3>Accessible Record Views</h3>${listMini(roleInfo.reports)}<p class="mini">This is a simulated access model for education. Real hospitals must apply local policy, privacy law and secure authentication.</p></div>
+        </aside>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="section-title" style="margin-top:0"><div><h3>3. Practice the Active Workflow Step</h3><p>Use this panel to practice the selected step, then save the relevant form above. You can click the timeline or complete the current step to move through the patient journey.</p></div></div>
+        ${timelineHtml(true)}
+        <div id="stepPanel" style="margin-top:16px">${stepPanel()}</div>
+      </div>
+    `;
+  }
+
+  const codingSystems = [
+    {system:'ICD-10-CM', category:'Diagnosis', description:'Diagnosis classification used for morbidity, clinical reporting and reimbursement in countries that use ICD-10-CM.', official:'https://icd10cmtool.cdc.gov/'},
+    {system:'ICD-11', category:'Diagnosis', description:'WHO international classification for diseases, symptoms, injuries and health conditions.', official:'https://icd.who.int/browse/latest-release/mms/en'},
+    {system:'ICD-10-PCS', category:'Inpatient Procedure', description:'Procedure coding system used for inpatient hospital procedures in the United States.', official:'https://www.cms.gov/medicare/coding-billing/icd-10-codes'},
+    {system:'CPT', category:'Professional Procedure/Service', description:'Procedure and service code set maintained by the American Medical Association. Full CPT content requires official/licensed access.', official:'https://www.ama-assn.org/practice-management/cpt'},
+    {system:'HCPCS Level II', category:'Supplies/Drugs/Services', description:'Codes used for products, supplies, DME, ambulance and selected drugs/services in US billing workflows.', official:'https://www.cms.gov/medicare/coding-billing/healthcare-common-procedure-system'},
+    {system:'SNOMED CT', category:'Clinical Terminology', description:'Comprehensive clinical terminology used to record meanings in EHR clinical documentation.', official:'https://www.snomed.org/snomed-ct'},
+    {system:'LOINC', category:'Laboratory/Observation', description:'International standard for identifying health measurements, observations and clinical documents.', official:'https://loinc.org/'},
+    {system:'RxNorm', category:'Drug Terminology', description:'NLM terminology providing normalized names for clinical drugs and links to drug vocabularies.', official:'https://www.nlm.nih.gov/research/umls/rxnorm/index.html'},
+    {system:'ATC', category:'Drug Classification', description:'WHO Anatomical Therapeutic Chemical classification for grouping drugs by therapeutic/pharmacological properties.', official:'https://www.who.int/tools/atc-ddd-toolkit/atc-classification'},
+    {system:'NDC', category:'Drug Product Identifier', description:'National Drug Code identifiers for drug products; use official/local drug databases for current product-level codes.', official:'https://www.fda.gov/drugs/drug-approvals-and-databases/national-drug-code-directory'}
+  ];
+
+  const codingCodeBank = [
+    {code:'J18.9', system:'ICD-10-CM', category:'Respiratory diagnosis', type:'Diagnosis', label:'Pneumonia, unspecified organism', hint:'Use when pneumonia is documented but organism is not specified.'},
+    {code:'J20.9', system:'ICD-10-CM', category:'Respiratory diagnosis', type:'Diagnosis', label:'Acute bronchitis, unspecified', hint:'Training code for provider-documented acute bronchitis when no more specific organism is documented.'},
+    {code:'J15.9', system:'ICD-10-CM', category:'Respiratory diagnosis', type:'Diagnosis', label:'Unspecified bacterial pneumonia', hint:'Use only when bacterial pneumonia is documented.'},
+    {code:'R06.02', system:'ICD-10-CM', category:'Symptom', type:'Diagnosis', label:'Shortness of breath', hint:'Usually not primary if definitive pneumonia is documented.'},
+    {code:'R05.1', system:'ICD-10-CM', category:'Symptom', type:'Diagnosis', label:'Acute cough', hint:'Symptom code; check whether a confirmed condition explains it.'},
+    {code:'R50.9', system:'ICD-10-CM', category:'Symptom', type:'Diagnosis', label:'Fever, unspecified', hint:'Avoid coding separately if integral to confirmed infection unless required by policy.'},
+    {code:'Z88.0', system:'ICD-10-CM', category:'Status/allergy', type:'Condition', label:'Allergy status to penicillin', hint:'Relevant when allergy affects medication selection.'},
+    {code:'E11.9', system:'ICD-10-CM', category:'Endocrine diagnosis', type:'Diagnosis', label:'Type 2 diabetes mellitus without complications', hint:'Use when no complication or hyperglycemia is documented.'},
+    {code:'E11.65', system:'ICD-10-CM', category:'Endocrine diagnosis', type:'Diagnosis', label:'Type 2 diabetes mellitus with hyperglycemia', hint:'Use when hyperglycemia is documented with type 2 diabetes.'},
+    {code:'I10', system:'ICD-10-CM', category:'Circulatory diagnosis', type:'Condition', label:'Essential hypertension', hint:'Common secondary condition when documented and managed.'},
+    {code:'I21.4', system:'ICD-10-CM', category:'Circulatory diagnosis', type:'Diagnosis', label:'Non-ST elevation myocardial infarction', hint:'Use when NSTEMI is clearly documented by provider.'},
+    {code:'I25.10', system:'ICD-10-CM', category:'Circulatory diagnosis', type:'Condition', label:'Atherosclerotic heart disease without angina', hint:'Code when documented and clinically relevant.'},
+    {code:'K35.80', system:'ICD-10-CM', category:'Digestive diagnosis', type:'Diagnosis', label:'Unspecified acute appendicitis', hint:'Use if acute appendicitis is documented without further detail.'},
+    {code:'N39.0', system:'ICD-10-CM', category:'Genitourinary diagnosis', type:'Diagnosis', label:'Urinary tract infection, site not specified', hint:'Use when UTI is documented without specific site.'},
+    {code:'A41.9', system:'ICD-10-CM', category:'Infectious diagnosis', type:'Diagnosis', label:'Sepsis, unspecified organism', hint:'Do not assign if sepsis is only suspected and not clearly documented.'},
+    {code:'J45.909', system:'ICD-10-CM', category:'Respiratory diagnosis', type:'Condition', label:'Unspecified asthma, uncomplicated', hint:'Use when asthma is documented without exacerbation or severity detail.'},
+    {code:'N18.9', system:'ICD-10-CM', category:'Renal diagnosis', type:'Condition', label:'Chronic kidney disease, unspecified', hint:'Query if CKD stage is clinically important but not documented.'},
+    {code:'S72.001A', system:'ICD-10-CM', category:'Injury diagnosis', type:'Diagnosis', label:'Fracture of unspecified part of neck of right femur, initial encounter', hint:'Injury codes often require laterality, encounter and detail.'},
+    {code:'O80', system:'ICD-10-CM', category:'Obstetric diagnosis', type:'Diagnosis', label:'Encounter for full-term uncomplicated delivery', hint:'Use only when delivery is full term and uncomplicated.'},
+    {code:'M54.50', system:'ICD-10-CM', category:'Musculoskeletal diagnosis', type:'Diagnosis', label:'Low back pain, unspecified', hint:'Symptom/condition code for documented low back pain.'},
+    {code:'U07.1', system:'ICD-10-CM', category:'Infectious diagnosis', type:'Diagnosis', label:'COVID-19', hint:'Use only with confirmed/documented COVID-19 according to applicable guidelines.'},
+
+    {code:'CA40', system:'ICD-11', category:'Respiratory diagnosis', type:'Reference', label:'Pneumonia', hint:'ICD-11 reference concept; verify exact postcoordination in official browser.'},
+    {code:'5A11', system:'ICD-11', category:'Endocrine diagnosis', type:'Reference', label:'Type 2 diabetes mellitus', hint:'ICD-11 reference concept; verify current release.'},
+    {code:'BA41', system:'ICD-11', category:'Circulatory diagnosis', type:'Reference', label:'Acute myocardial infarction', hint:'ICD-11 reference concept; verify official browser.'},
+
+    {code:'0DTJ4ZZ', system:'ICD-10-PCS', category:'Inpatient surgery', type:'Procedure', label:'Resection of appendix, percutaneous endoscopic approach', hint:'Used for laparoscopic appendectomy in inpatient PCS training examples.'},
+    {code:'0BH17EZ', system:'ICD-10-PCS', category:'Respiratory procedure', type:'Procedure', label:'Insertion of endotracheal airway, via natural or artificial opening', hint:'Procedure coding depends on documentation and approach.'},
+    {code:'5A1935Z', system:'ICD-10-PCS', category:'Respiratory support', type:'Procedure', label:'Respiratory ventilation, less than 24 consecutive hours', hint:'Training example for inpatient procedure coding.'},
+
+    {code:'71045', system:'CPT', category:'Radiology', type:'Procedure', label:'Chest X-ray, single view', hint:'CPT is AMA-maintained; verify official CPT wording and licensing.'},
+    {code:'93000', system:'CPT', category:'Cardiology', type:'Procedure', label:'Electrocardiogram with interpretation and report', hint:'Verify official CPT descriptor before real use.'},
+    {code:'36415', system:'CPT', category:'Laboratory service', type:'Procedure', label:'Collection of venous blood by venipuncture', hint:'Common laboratory service training code.'},
+    {code:'85025', system:'CPT', category:'Laboratory service', type:'Procedure', label:'Complete blood count with automated differential', hint:'Verify current payer and local coding rules.'},
+    {code:'80053', system:'CPT', category:'Laboratory panel', type:'Procedure', label:'Comprehensive metabolic panel', hint:'Verify official CPT source for current descriptor.'},
+    {code:'44970', system:'CPT', category:'Surgery', type:'Procedure', label:'Laparoscopic appendectomy', hint:'Verify official CPT descriptor and coding notes.'},
+    {code:'99213', system:'CPT', category:'Evaluation and management', type:'Procedure', label:'Established patient office/outpatient visit, low/moderate training example', hint:'E/M coding requires documentation, medical decision making or time rules.'},
+    {code:'99214', system:'CPT', category:'Evaluation and management', type:'Procedure', label:'Established patient office/outpatient visit, higher complexity training example', hint:'E/M level must be supported by documentation.'},
+
+    {code:'G0463', system:'HCPCS Level II', category:'Clinic visit', type:'Procedure', label:'Hospital outpatient clinic visit for assessment and management', hint:'Use depends on payer and setting.'},
+    {code:'J0696', system:'HCPCS Level II', category:'Injectable drug', type:'MedicationCode', label:'Injection, ceftriaxone sodium, per 250 mg', hint:'HCPCS drug code example; verify dosage and payer rules.'},
+    {code:'A0428', system:'HCPCS Level II', category:'Ambulance', type:'Procedure', label:'Ambulance service, basic life support, non-emergency transport', hint:'HCPCS Level II example for transport services.'},
+    {code:'E0114', system:'HCPCS Level II', category:'DME', type:'Supply', label:'Crutches, underarm, other than wood, adjustable or fixed', hint:'DME code example.'},
+
+    {code:'233604007', system:'SNOMED CT', category:'Clinical finding', type:'Reference', label:'Pneumonia', hint:'Used for clinical meaning in EHR documentation; not a billing code.'},
+    {code:'44054006', system:'SNOMED CT', category:'Clinical finding', type:'Reference', label:'Type 2 diabetes mellitus', hint:'Clinical terminology concept for EHR documentation.'},
+    {code:'38341003', system:'SNOMED CT', category:'Clinical finding', type:'Reference', label:'Hypertensive disorder', hint:'Clinical terminology concept.'},
+    {code:'22298006', system:'SNOMED CT', category:'Clinical finding', type:'Reference', label:'Myocardial infarction', hint:'Clinical terminology concept.'},
+    {code:'74400008', system:'SNOMED CT', category:'Clinical finding', type:'Reference', label:'Appendicitis', hint:'Clinical terminology concept.'},
+    {code:'386661006', system:'SNOMED CT', category:'Symptom', type:'Reference', label:'Fever', hint:'Clinical terminology concept.'},
+    {code:'267036007', system:'SNOMED CT', category:'Symptom', type:'Reference', label:'Dyspnea', hint:'Clinical terminology concept.'},
+
+    {code:'6690-2', system:'LOINC', category:'Hematology', type:'Lab', label:'Leukocytes [#/volume] in Blood by Automated count', hint:'WBC count used in infection/inflammation assessment.'},
+    {code:'718-7', system:'LOINC', category:'Hematology', type:'Lab', label:'Hemoglobin [Mass/volume] in Blood', hint:'Common CBC component.'},
+    {code:'2345-7', system:'LOINC', category:'Chemistry', type:'Lab', label:'Glucose [Mass/volume] in Serum or Plasma', hint:'Common diabetes/metabolic monitoring observation.'},
+    {code:'4548-4', system:'LOINC', category:'Chemistry', type:'Lab', label:'Hemoglobin A1c/Hemoglobin.total in Blood', hint:'Common diabetes control marker.'},
+    {code:'6598-7', system:'LOINC', category:'Cardiac marker', type:'Lab', label:'Troponin T.cardiac [Mass/volume] in Serum or Plasma', hint:'Cardiac injury marker training example.'},
+    {code:'94500-6', system:'LOINC', category:'Microbiology', type:'Lab', label:'SARS-CoV-2 RNA respiratory specimen by NAA with probe detection', hint:'COVID-19 molecular test example.'},
+    {code:'11502-2', system:'LOINC', category:'Document', type:'Lab', label:'Laboratory report', hint:'LOINC document-type example.'},
+    {code:'18748-4', system:'LOINC', category:'Diagnostic imaging', type:'Lab', label:'Diagnostic imaging study', hint:'Use LOINC browser for exact imaging report codes.'},
+
+    {code:'197361', system:'RxNorm', category:'Antibiotic drug', type:'Medication', label:'Amoxicillin 500 MG Oral Capsule', hint:'Avoid in penicillin allergy unless clinically appropriate and documented.'},
+    {code:'197454', system:'RxNorm', category:'Antibiotic drug', type:'Medication', label:'Azithromycin 250 MG Oral Tablet', hint:'Medication terminology example; verify RxNorm current concept.'},
+    {code:'860975', system:'RxNorm', category:'Diabetes drug', type:'Medication', label:'Metformin hydrochloride 500 MG Oral Tablet', hint:'Common medication terminology training example.'},
+    {code:'314076', system:'RxNorm', category:'Cardiovascular drug', type:'Medication', label:'Lisinopril 10 MG Oral Tablet', hint:'Verify current RxNorm concept before production use.'},
+    {code:'617320', system:'RxNorm', category:'Lipid drug', type:'Medication', label:'Atorvastatin 20 MG Oral Tablet', hint:'Medication terminology training example.'},
+
+    {code:'J01CA04', system:'ATC', category:'Antibacterials', type:'Medication', label:'Amoxicillin', hint:'ATC drug classification example.'},
+    {code:'J01FA10', system:'ATC', category:'Antibacterials', type:'Medication', label:'Azithromycin', hint:'ATC drug classification example.'},
+    {code:'A10BA02', system:'ATC', category:'Diabetes drugs', type:'Medication', label:'Metformin', hint:'ATC drug classification example.'},
+    {code:'C09AA03', system:'ATC', category:'ACE inhibitors', type:'Medication', label:'Lisinopril', hint:'ATC drug classification example.'},
+    {code:'C10AA05', system:'ATC', category:'Lipid modifying agents', type:'Medication', label:'Atorvastatin', hint:'ATC drug classification example.'},
+    {code:'B01AC06', system:'ATC', category:'Antithrombotic agents', type:'Medication', label:'Acetylsalicylic acid', hint:'ATC drug classification example.'},
+
+    {code:'R99', system:'ICD-10', category:'Mortality coding', type:'Diagnosis', label:'Other ill-defined and unspecified causes of mortality', hint:'Mortality training code; avoid when a more specific underlying cause is documented.'},
+    {code:'I46.9', system:'ICD-10-CM', category:'Mortality coding', type:'Diagnosis', label:'Cardiac arrest, cause unspecified', hint:'Mechanism/terminal event; underlying cause should be selected when documented.'},
+    {code:'J96.00', system:'ICD-10-CM', category:'Mortality coding', type:'Diagnosis', label:'Acute respiratory failure, unspecified whether with hypoxia or hypercapnia', hint:'Often part of causal sequence; review underlying disease.'},
+    {code:'C34.90', system:'ICD-10-CM', category:'Neoplasm diagnosis', type:'Diagnosis', label:'Malignant neoplasm of unspecified part of unspecified bronchus or lung', hint:'May be an underlying cause of death when documented in mortality sequence.'},
+    {code:'I50.9', system:'ICD-10-CM', category:'Circulatory diagnosis', type:'Diagnosis', label:'Heart failure, unspecified', hint:'Can be intermediate or underlying cause depending on physician certification.'},
+    {code:'I63.9', system:'ICD-10-CM', category:'Cerebrovascular diagnosis', type:'Diagnosis', label:'Cerebral infarction, unspecified', hint:'Stroke mortality training code; verify details and sequence.'},
+    {code:'E87.5', system:'ICD-10-CM', category:'Metabolic diagnosis', type:'Condition', label:'Hyperkalemia', hint:'Important secondary condition when documented and treated.'},
+    {code:'N17.9', system:'ICD-10-CM', category:'Renal diagnosis', type:'Diagnosis', label:'Acute kidney failure, unspecified', hint:'Can be associated with sepsis, dehydration or other underlying causes.'},
+    {code:'W19.XXXA', system:'ICD-10-CM', category:'External cause', type:'Diagnosis', label:'Unspecified fall, initial encounter', hint:'External cause training example for injury and mortality chains.'},
+    {code:'V89.2XXA', system:'ICD-10-CM', category:'External cause', type:'Diagnosis', label:'Person injured in unspecified motor-vehicle accident, traffic, initial encounter', hint:'External cause training example; verify official external cause code details.'},
+  ];
+
+  const baseCodingCases = [
+    {
+      id:'cap', title:'Case 1: Community-Acquired Pneumonia with Penicillin Allergy', level:'Core inpatient case',
+      summary:'Fictional inpatient admitted with fever, productive cough and shortness of breath. Chest X-ray shows right lower lobe opacity. Physician documents community-acquired pneumonia. Penicillin allergy is documented and antibiotic selection is adjusted.',
+      evidence:['Provider diagnosis: community-acquired pneumonia','Symptoms: fever, acute cough, shortness of breath','Diagnostic evidence: chest X-ray opacity and elevated WBC','Allergy: penicillin allergy affected medication selection'],
+      expected:{primary:'J18.9', secondary:['Z88.0'], procedures:['71045','85025'], labs:['6690-2'], medications:['J01FA10','197454']},
+      guide:'Choose pneumonia as primary because it is the documented reason for admission. Add penicillin allergy because it affects medication choice. Select chest X-ray and CBC-related codes as services/observations. Avoid coding fever and cough separately when explained by pneumonia unless local rules require it.'
+    },
+    {
+      id:'appendicitis', title:'Case 2: Acute Appendicitis with Laparoscopic Appendectomy', level:'Surgery coding case',
+      summary:'Fictional emergency admission for right lower quadrant abdominal pain. Surgeon documents acute appendicitis. Laparoscopic appendectomy is performed and discharge summary is complete.',
+      evidence:['Provider diagnosis: acute appendicitis','Procedure note: laparoscopic appendectomy','CBC ordered and WBC elevated','No sepsis documented'],
+      expected:{primary:'K35.80', secondary:[], procedures:['44970','0DTJ4ZZ','85025'], labs:['6690-2'], medications:[]},
+      guide:'Use acute appendicitis as primary diagnosis. Select both procedure-code examples if the exercise asks for CPT and inpatient PCS comparison. Do not assign sepsis because it is not documented.'
+    },
+    {
+      id:'diabetes', title:'Case 3: Telehealth Type 2 Diabetes Follow-up with Hyperglycemia', level:'Digital health case',
+      summary:'Fictional telehealth follow-up for type 2 diabetes. Provider documents type 2 diabetes mellitus with hyperglycemia and essential hypertension. HbA1c and glucose are reviewed. Metformin therapy continues.',
+      evidence:['Visit type: telehealth follow-up','Provider diagnosis: type 2 diabetes mellitus with hyperglycemia','Comorbidity: essential hypertension','Labs reviewed: HbA1c and glucose','Medication: metformin'],
+      expected:{primary:'E11.65', secondary:['I10'], procedures:['99213'], labs:['4548-4','2345-7'], medications:['A10BA02','860975']},
+      guide:'The diabetes code must capture hyperglycemia because the provider documented it. Hypertension is a secondary condition. Add HbA1c/glucose observations and metformin medication codes as terminology practice.'
+    },
+    {
+      id:'nstemi', title:'Case 4: NSTEMI with ECG and Troponin Testing', level:'Cardiology coding case',
+      summary:'Fictional patient presents with chest pain. ECG is performed. Troponin is elevated. Provider documents NSTEMI and underlying hypertension. Aspirin is administered.',
+      evidence:['Provider diagnosis: NSTEMI','Cardiac marker: troponin elevated','Procedure/service: ECG','Comorbidity: hypertension','Medication: aspirin'],
+      expected:{primary:'I21.4', secondary:['I10'], procedures:['93000'], labs:['6598-7'], medications:['B01AC06']},
+      guide:'Assign NSTEMI only because the provider documented it. Chest pain is not selected as primary when definitive MI is documented. Hypertension can be added as a relevant secondary condition.'
+    },
+    {
+      id:'unclear-sepsis', title:'Case 5: UTI with Possible Sepsis - Query Required', level:'Documentation query case',
+      summary:'Fictional inpatient has UTI, fever and elevated WBC. Nurse note says “sepsis protocol started”, but provider final diagnosis only states UTI. The coder must decide whether to query before assigning sepsis.',
+      evidence:['Provider diagnosis: UTI','Nursing note: sepsis protocol started','Clinical indicators: fever and elevated WBC','No provider-confirmed sepsis diagnosis in discharge summary'],
+      expected:{primary:'N39.0', secondary:[], procedures:['85025'], labs:['6690-2'], medications:[]},
+      requiresQuery:true,
+      guide:'Do not assign sepsis based only on protocol language or clinical indicators. If sepsis is clinically suspected but not clearly documented by the provider, send a compliant coding query. Finalize UTI unless provider clarifies sepsis.'
+    }
+  ];
+
+
+  const generatedCodingTopics = [
+    ['bronchitis','Acute Bronchitis','Respiratory coding case','Fictional outpatient visit for acute bronchitis with cough and wheeze. Provider documents acute bronchitis and orders chest X-ray and CBC.','J20.9',[],['71045','85025'],['6690-2'],[], 'Use acute bronchitis when provider documents it. Do not code cough separately when the definitive condition explains it.'],
+    ['asthma','Asthma Exacerbation','Respiratory coding case','Fictional emergency visit for asthma symptoms. Provider documents uncomplicated asthma and reviews oxygen saturation.','J45.909',[],['99214'],[],[], 'Select asthma when provider documentation supports it and review severity/exacerbation details.'],
+    ['ckd','Chronic Kidney Disease','Renal coding case','Fictional clinic case with chronic kidney disease documented without stage. Creatinine and eGFR are reviewed.','N18.9',['I10'],['80053'],['2345-7'],[], 'Use CKD unspecified if stage is absent, and consider query for stage if clinically important.'],
+    ['hip-fracture','Right Femoral Neck Fracture','Orthopedic coding case','Fictional inpatient case after fall with right femoral neck fracture. X-ray confirms fracture and fall is documented.','S72.001A',['W19.XXXA'],[],[],[], 'Injury coding requires laterality, encounter and external cause details.'],
+    ['delivery','Uncomplicated Delivery','Obstetric coding case','Fictional full-term uncomplicated delivery. Provider documents normal delivery with no complications.','O80',[],[],[],[], 'Use uncomplicated delivery only when the record supports full-term normal delivery without complications.'],
+    ['covid','Confirmed COVID-19','Infectious disease coding case','Fictional outpatient case with provider-confirmed COVID-19 and respiratory symptoms.','U07.1',[],['99213'],[],[], 'Use COVID-19 only when confirmed/documented according to applicable guidelines.'],
+    ['lowback','Low Back Pain','Musculoskeletal coding case','Fictional outpatient visit for low back pain. No specific injury or radiculopathy is documented.','M54.50',[],['99213'],[],[], 'Use symptom/condition code when no more specific diagnosis is documented.'],
+    ['aki','Acute Kidney Injury','Renal coding case','Fictional inpatient case with provider-documented acute kidney injury and hyperkalemia.','N17.9',['E87.5'],['80053'],['2345-7'],[], 'Code acute kidney injury and relevant electrolyte disorder when documented and managed.'],
+    ['heartfailure','Heart Failure','Cardiology coding case','Fictional inpatient case with provider-documented heart failure and hypertension.','I50.9',['I10'],['93000','80053'],['2345-7'],[], 'Select heart failure as primary if it is the reason for admission; add hypertension if managed.'],
+    ['stroke','Cerebral Infarction','Neurology coding case','Fictional emergency admission with provider-documented cerebral infarction and hypertension.','I63.9',['I10'],['93000'],[],[], 'Stroke coding requires type, site and laterality when available.'],
+    ['lung-ca-mortality','Mortality: Lung Cancer to Respiratory Failure','Mortality coding case','Fictional death certificate sequence lists lung cancer leading to acute respiratory failure and death.','C34.90',['J96.00'],[],[],[], 'Mortality coding training: identify the underlying cause that started the chain of events, not only the terminal event.'],
+    ['cardiac-arrest-mortality','Mortality: Cardiac Arrest with Heart Failure','Mortality coding case','Fictional death certificate lists heart failure leading to cardiac arrest.','I50.9',['I46.9'],['93000'],[],[], 'Mortality coding training: cardiac arrest is usually a terminal event; review the underlying cause sequence.'],
+    ['fall-mortality','Mortality: Fall with Hip Fracture','Mortality coding case','Fictional mortality sequence includes fall causing right femoral neck fracture followed by complications.','S72.001A',['W19.XXXA'],[],[],[], 'Mortality coding training: include injury diagnosis and external cause when the fatal chain begins with an accident.'],
+    ['uti-query','UTI Documentation Query','Documentation query case','Fictional UTI case has fever and elevated WBC but no provider-confirmed sepsis diagnosis.','N39.0',[],['85025'],['6690-2'],[], 'Do not code sepsis unless the provider confirms it. Send a query if indicators are present but documentation is unclear.', true]
+  ];
+
+  function buildGeneratedCodingCases(){
+    const cases=[];
+    let n=baseCodingCases.length+1;
+    for(let round=0; cases.length < 100-baseCodingCases.length; round++){
+      const t=generatedCodingTopics[round % generatedCodingTopics.length];
+      const suffix=Math.floor(round/generatedCodingTopics.length)+1;
+      const id=`auto-${t[0]}-${suffix}`;
+      cases.push({
+        id,
+        title:`Case ${n}: ${t[1]} ${suffix>1?'Practice Variant '+suffix:''}`.trim(),
+        level:t[2],
+        summary:t[3] + (suffix>1 ? ` Variant ${suffix} changes the setting, documentation detail or learning focus while keeping the same academic coding principle.` : ''),
+        evidence:[`Provider documentation supports: ${t[1]}`, 'Review principal diagnosis, secondary conditions and supported services.', 'Use official code browsers for real coding and local policy verification.'],
+        expected:{primary:t[4], secondary:t[5], procedures:t[6], labs:t[7], medications:t[8]},
+        requiresQuery:!!t[10],
+        guide:t[9]
+      });
+      n++;
+    }
+    return cases;
+  }
+
+  const codingCases = [...baseCodingCases, ...buildGeneratedCodingCases()];
+
+
+
+  const codingPracticeAreas = [
+    'Primary / principal diagnosis coding',
+    'Secondary diagnosis & comorbidity coding',
+    'Procedures, services & actions coding',
+    'Surgical operation coding',
+    'Medication / drug classification coding',
+    'Mortality coding',
+    'Complete mixed coding case'
+  ];
+  function codingAreaForCase(c){
+    const text=[c.title,c.level,c.summary,c.guide].join(' ').toLowerCase();
+    if(text.includes('mortality') || text.includes('death')) return 'Mortality coding';
+    if(text.includes('appendectomy') || text.includes('surgery') || text.includes('operative') || text.includes('fracture') || text.includes('delivery')) return 'Surgical operation coding';
+    if((c.expected?.medications||[]).length) return 'Medication / drug classification coding';
+    if((c.expected?.procedures||[]).length) return 'Procedures, services & actions coding';
+    if((c.expected?.secondary||[]).length) return 'Secondary diagnosis & comorbidity coding';
+    return 'Primary / principal diagnosis coding';
+  }
+  function codingCasesByArea(area){
+    if(!area) return [];
+    if(area==='Complete mixed coding case') return codingCases;
+    return codingCases.filter(c=>codingAreaForCase(c)===area || (area==='Secondary diagnosis & comorbidity coding' && (c.expected?.secondary||[]).length));
+  }
+
+  function coding(){
+    const selectedArea = state.coding?.area || '';
+    const areaCases = codingCasesByArea(selectedArea);
+    const selectedCaseId = state.coding?.caseId || '';
+    const caseObj = selectedArea && selectedCaseId ? areaCases.find(c=>c.id===selectedCaseId) : null;
+    const result = caseObj ? (state.coding?.result || null) : null;
+    const systems = [...new Set(codingCodeBank.map(c=>c.system))];
+    const categories = [...new Set(codingCodeBank.map(c=>c.category))];
+    return html`
+      <div class="card coding-hero">
+        <div class="section-title" style="margin-top:0"><div><span class="pill blue">Structured Academic Coding Simulator</span><h3>Medical Coding Lab</h3><p>Practice coding from fictional medical-record stories. Select a coding area first, then select a case. No cases or code lists are shown until the user makes a selection.</p></div><span class="pill success">100 practice cases</span></div>
+        <div class="source-note">The lab includes principal/primary diagnosis, secondary diagnosis, procedures, services, surgery, laboratory/observation codes, medication/drug classifications and mortality coding. It is for university training only.</div>
+      </div>
+      <div class="card" style="margin-top:18px"><div class="section-title" style="margin-top:0"><div><h3>1. Select Coding Area</h3><p>Cases are grouped by coding purpose so students learn the rule before selecting codes.</p></div></div><div class="form-grid"><div class="field"><label>Coding area</label><select id="codingAreaSelect"><option value="">Choose coding area...</option>${codingPracticeAreas.map(a=>`<option value="${a}" ${a===selectedArea?'selected':''}>${a}</option>`).join('')}</select></div><div class="field"><label>Practice case</label><select id="codingCaseSelect" ${selectedArea?'':'disabled'}><option value="">Choose case...</option>${areaCases.map(c=>`<option value="${c.id}" ${c.id===selectedCaseId?'selected':''}>${c.title}</option>`).join('')}</select></div></div>${!selectedArea?`<div class="empty">Choose a coding area to load related training cases.</div>`:''}${selectedArea && !caseObj?`<div class="empty">Now choose one case from the selected coding area to open the story and coding form.</div>`:''}</div>
+      ${caseObj?`<div class="grid cols-2" style="margin-top:18px"><div class="card"><div class="section-title" style="margin-top:0"><div><h3>2. Read the Medical Record Story</h3><p>Code only what is supported by the fictional documentation.</p></div></div><div class="case-box"><span class="pill">${caseObj.level}</span><h4>${caseObj.title}</h4><p>${caseObj.summary}</p><h5>Documented Evidence</h5><ul>${caseObj.evidence.map(e=>`<li>${e}</li>`).join('')}</ul></div></div><div class="card"><div class="section-title" style="margin-top:0"><div><h3>Guided Coding Help</h3><p>Use the guide before submitting your answer.</p></div><button class="btn outline" id="showCodingGuide">Show Guide</button></div><div id="codingGuide" class="guide-box hidden"><h4>Case-specific guide</h4><p>${caseObj.guide}</p><ol><li>Identify the principal or primary diagnosis from provider documentation.</li><li>Add secondary diagnoses only if documented and relevant.</li><li>Select procedures, services, surgery, lab, imaging and medication codes only when supported by the record.</li><li>For mortality cases, identify the underlying cause of death and contributing conditions.</li><li>If documentation is unclear, submit a coding query rather than guessing.</li></ol></div>${caseObj.requiresQuery?`<div class="alert warning"><strong>Query training point:</strong> this case contains unclear documentation. A coding query is expected before assigning unsupported codes.</div>`:''}</div></div><div class="card" style="margin-top:18px"><div class="section-title" style="margin-top:0"><div><h3>3. Code the Case</h3><p>Select codes, submit your answer and review correct/wrong feedback.</p></div></div><div class="form-grid"><div class="field"><label>Principal / primary diagnosis code</label><select id="c_primary"><option value="">Select primary diagnosis...</option>${codingOptions(['Diagnosis'], caseObj.expected.primary)}</select></div><div class="field"><label>Coding action</label><select id="c_action"><option value="finalize">Finalize coding practice</option><option value="query">Send coding query before final coding</option></select></div><div class="field full"><label>Secondary diagnoses / comorbidities</label><div class="checkbox-grid" id="c_secondary">${codingCheckboxes(['Condition','Diagnosis'], state.coding?.selectedSecondaries || [], 'secondary', caseObj.expected.secondary)}</div></div><div class="field full"><label>Procedures, services, actions and surgical operations</label><div class="checkbox-grid" id="c_procedures">${codingCheckboxes(['Procedure','Supply','MedicationCode'], state.coding?.selectedProcedures || [], 'procedure', caseObj.expected.procedures)}</div></div><div class="field full"><label>Laboratory, imaging and observation codes</label><div class="checkbox-grid" id="c_labs">${codingCheckboxes(['Lab'], state.coding?.selectedLabs || [], 'lab', caseObj.expected.labs)}</div></div><div class="field full"><label>Medication / drug classification codes</label><div class="checkbox-grid" id="c_meds">${codingCheckboxes(['Medication'], state.coding?.selectedMedications || [], 'medication', caseObj.expected.medications)}</div></div><div class="field full"><label>Coding query note</label><textarea id="c_query" placeholder="Write a compliant query if documentation is unclear or incomplete...">${state.coding?.query || ''}</textarea></div></div><div class="hero-actions" style="margin-top:14px"><button class="btn" id="checkCoding">Check Coding Practice</button><button class="btn outline" id="resetCodingPractice">Reset Coding Selection</button></div></div><div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>4. Visible Result & Recommendations</h3><div id="codingFeedback" class="report-box">${result ? renderCodingResult(result, caseObj) : '<p class="mini">Submit your coding answer to see tick marks, wrong selections, explanations, recommendations and the correct coding answer.</p>'}</div></div><div class="card"><h3>Correct Code Answer Key</h3><p class="mini">Displayed for learning after a case is selected.</p>${expectedCodeMap(caseObj)}</div></div>`:''}
+      <div class="card" style="margin-top:18px"><div class="section-title" style="margin-top:0"><div><h3>Optional Coding Reference Lookup</h3><p>Choose a coding system or category first. The table stays empty until a filter is selected.</p></div><span class="pill">Teaching library</span></div><div class="resource-toolbar"><select id="codingSystemFilter"><option value="">Choose coding system...</option>${systems.map(x=>`<option>${x}</option>`).join('')}</select><select id="codingCategoryFilter"><option value="">Choose code category...</option>${categories.map(x=>`<option>${x}</option>`).join('')}</select><button class="btn outline" id="resetCodingLibrary">Reset</button></div><div id="codingLibraryResults" class="table-wrap"><div class="empty">Select a coding system or code category to display code examples.</div></div><p class="source-note">For real coding, always verify with official current guidelines, local policy, payer rules and licensed coding references.</p></div>
+    `;
+  }
+
+  function codingOptions(types, selected){
+    return codingCodeBank.filter(c=>types.includes(c.type)).map(c=>`<option value="${c.code}" ${selected===c.code?'selected':''}>${c.code} • ${c.system} • ${c.label}</option>`).join('');
+  }
+
+  function codingCheckboxes(types, selected=[], name, expected=[]){
+    const seen = new Set();
+    return codingCodeBank.filter(c=>types.includes(c.type)).filter(c=>{
+      const key=c.code+'-'+c.system; if(seen.has(key)) return false; seen.add(key); return true;
+    }).map(c=>`<label class="code-check ${expected.includes(c.code)?'expected':''}"><input type="checkbox" name="${name}" value="${c.code}" ${selected.includes(c.code)?'checked':''}><span><strong>${c.code}</strong><small>${c.system} • ${c.label}</small></span></label>`).join('');
+  }
+
+  function expectedCodeMap(caseObj){
+    const rows = [
+      ['Primary diagnosis',[caseObj.expected.primary]],
+      ['Secondary/additional diagnoses',caseObj.expected.secondary],
+      ['Procedures/services/surgery',caseObj.expected.procedures],
+      ['Labs/observations/imaging',caseObj.expected.labs],
+      ['Medication/drug codes',caseObj.expected.medications]
+    ];
+    return `<div class="table-wrap"><table class="table"><thead><tr><th>Area</th><th>Expected code(s)</th><th>Meaning</th></tr></thead><tbody>${rows.map(([area,codes])=>`<tr><td>${area}</td><td>${codes.length?codes.map(c=>`<span class="code-chip">${c}</span>`).join(' '):'<span class="mini">None required</span>'}</td><td>${codes.map(codeMeaning).join('<br>') || 'No extra code expected for this fictional case.'}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+
+  function codeMeaning(code){
+    const c = codingCodeBank.find(x=>x.code===code);
+    return c ? `<strong>${c.system}</strong> ${c.label}` : code;
+  }
+
+  function selectedValues(name){ return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(x=>x.value); }
+
+  function evaluateCoding(caseObj, selected){
+    const primaryScore = selected.primary===caseObj.expected.primary ? 25 : 0;
+    const secondaryEval = evalSet(selected.secondary, caseObj.expected.secondary);
+    const procedureEval = evalSet(selected.procedures, caseObj.expected.procedures);
+    const labEval = evalSet(selected.labs, caseObj.expected.labs);
+    const medEval = evalSet(selected.medications, caseObj.expected.medications);
+    const secondaryScore = Math.round(15 * secondaryEval.ratio);
+    const procedureScore = Math.round(20 * procedureEval.ratio);
+    const labScore = Math.round(15 * labEval.ratio);
+    const medScore = Math.round(15 * medEval.ratio);
+    let queryScore = 10;
+    const queryText = (selected.query||'').trim();
+    if(caseObj.requiresQuery){ queryScore = selected.action==='query' && queryText.length>=25 ? 10 : 0; }
+    else { queryScore = selected.action==='finalize' ? 10 : Math.min(6, queryText.length>=20 ? 6 : 3); }
+    const rawScore = Math.min(100, primaryScore + secondaryScore + procedureScore + labScore + medScore + queryScore);
+    const recommendations = [];
+    if(primaryScore===0) recommendations.push('Review the provider-documented principal diagnosis and avoid coding only from symptoms.');
+    if(secondaryEval.missing.length) recommendations.push('Add relevant secondary conditions that affected care, treatment, monitoring or resources: '+secondaryEval.missing.join(', ')+'.');
+    if(procedureEval.missing.length) recommendations.push('Review orders/procedure notes and add missing procedure or service codes: '+procedureEval.missing.join(', ')+'.');
+    if(labEval.missing.length) recommendations.push('Review lab/imaging/observation documentation and add missing LOINC or service-related codes: '+labEval.missing.join(', ')+'.');
+    if(medEval.missing.length) recommendations.push('Review medication orders and add relevant medication terminology/drug classification codes: '+medEval.missing.join(', ')+'.');
+    if(secondaryEval.extra.length || procedureEval.extra.length || labEval.extra.length || medEval.extra.length) recommendations.push('Remove codes not supported by documentation: '+[...secondaryEval.extra,...procedureEval.extra,...labEval.extra,...medEval.extra].join(', ')+'.');
+    if(caseObj.requiresQuery && queryScore===0) recommendations.push('Send a compliant coding query because documentation is unclear or conflicting. Do not code unconfirmed sepsis.');
+    if(!recommendations.length) recommendations.push('Excellent work. Continue by verifying official guidelines and local coding policy before real use.');
+    const status = rawScore>=85?'Competent':rawScore>=65?'Needs focused review':'Needs remediation';
+    return {caseId:caseObj.id, score:rawScore, status, selected, primaryScore, secondaryEval, procedureEval, labEval, medEval, queryScore, recommendations};
+  }
+
+  function evalSet(selected, expected){
+    const s=[...new Set(selected||[])], e=[...new Set(expected||[])];
+    const correct=s.filter(x=>e.includes(x));
+    const missing=e.filter(x=>!s.includes(x));
+    const extra=s.filter(x=>!e.includes(x));
+    const ratio=e.length ? Math.max(0, (correct.length - extra.length*0.25)/e.length) : (extra.length ? 0 : 1);
+    return {correct, missing, extra, ratio:Math.max(0, Math.min(1, ratio))};
+  }
+
+  function renderCodingResult(result, caseObj){
+    const bars = `
+      <div class="score-card"><div><strong>${result.score}%</strong><small>${result.status}</small></div><div class="progress"><span style="width:${result.score}%"></span></div></div>`;
+    const rows = [
+      ['Primary diagnosis', result.selected.primary || 'Not selected', [caseObj.expected.primary], result.primaryScore===25],
+      ['Secondary diagnoses', result.selected.secondary, caseObj.expected.secondary, result.secondaryEval.missing.length===0 && result.secondaryEval.extra.length===0],
+      ['Procedures/services', result.selected.procedures, caseObj.expected.procedures, result.procedureEval.missing.length===0 && result.procedureEval.extra.length===0],
+      ['Labs/observations', result.selected.labs, caseObj.expected.labs, result.labEval.missing.length===0 && result.labEval.extra.length===0],
+      ['Medication/drug codes', result.selected.medications, caseObj.expected.medications, result.medEval.missing.length===0 && result.medEval.extra.length===0],
+      ['Query/action', result.selected.action, [caseObj.requiresQuery?'query expected':'finalize usually acceptable'], result.queryScore>=8]
+    ];
+    return `${bars}<div class="table-wrap"><table class="table"><thead><tr><th>Area</th><th>Your selection</th><th>Expected</th><th>Result</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${fmtCodes(r[1])}</td><td>${fmtCodes(r[2])}</td><td>${r[3]?'<span class="pill success">✅ Correct</span>':'<span class="pill danger">❌ Needs review</span>'}</td></tr>`).join('')}</tbody></table></div><h4>Recommendations</h4><ul>${result.recommendations.map(x=>`<li>${x}</li>`).join('')}</ul><p class="mini"><strong>Guide:</strong> ${caseObj.guide}</p>`;
+  }
+
+  function fmtCodes(v){
+    const arr=Array.isArray(v)?v:[v];
+    return arr.filter(Boolean).length ? arr.filter(Boolean).map(x=>`<span class="code-chip">${x}</span>`).join(' ') : '<span class="mini">None selected</span>';
+  }
+
+  function renderCodingLibrary(){
+    const sys=$('codingSystemFilter')?.value||'';
+    const cat=$('codingCategoryFilter')?.value||'';
+    if(!sys && !cat){ const box=$('codingLibraryResults'); if(box) box.innerHTML = '<div class="empty">Select a coding system or category to display code examples.</div>'; return; }
+    const rows = codingCodeBank.filter(c=>(!sys || c.system===sys) && (!cat || c.category===cat));
+    const htmlRows = rows.map(c=>`<tr><td><span class="code-chip">${c.code}</span></td><td>${c.system}</td><td>${c.category}</td><td>${c.type}</td><td><strong>${c.label}</strong><br><small>${c.hint}</small></td></tr>`).join('');
+    const box=$('codingLibraryResults'); if(box) box.innerHTML = `<table class="table"><thead><tr><th>Code</th><th>System</th><th>Category</th><th>Type</th><th>Academic meaning / hint</th></tr></thead><tbody>${htmlRows || '<tr><td colspan="5">No matching codes found.</td></tr>'}</tbody></table>`;
+  }
+
+
+
+  function medicalLibrary(){
+    const libraryResources = [{"field": "Nursing", "specialty": "Fundamentals of Nursing", "title": "Nursing Fundamentals 2e", "type": "Free PDF / Open RN OER", "note": "Core nursing concepts, patient care, communication, documentation and nursing process. Creative Commons Attribution.", "url": "https://wtcs.pressbooks.pub/nursingfundamentals/open/download?type=pdf", "icon": "🩺"}, {"field": "Nursing", "specialty": "Nursing Skills", "title": "Nursing Skills", "type": "Free PDF / Open RN OER", "note": "Step-by-step nursing skills, safety checks, clinical procedures and documentation practice.", "url": "https://wtcs.pressbooks.pub/nursingskills/open/download?type=pdf", "icon": "🧑‍⚕️"}, {"field": "Nursing", "specialty": "Health Assessment", "title": "Nursing Health Assessment", "type": "Free PDF / Open RN OER", "note": "Assessment frameworks, history taking, physical assessment and clinical judgment.", "url": "https://wtcs.pressbooks.pub/healthassessment/open/download?type=pdf", "icon": "📝"}, {"field": "Nursing", "specialty": "Pharmacology", "title": "Nursing Pharmacology", "type": "Free PDF / Open RN OER", "note": "Medication classes, safe administration, dosage concepts and medication documentation.", "url": "https://wtcs.pressbooks.pub/pharmacology/open/download?type=pdf", "icon": "💊"}, {"field": "Nursing", "specialty": "Mental Health Nursing", "title": "Mental Health Nursing", "type": "Free PDF / Open RN OER", "note": "Mental health concepts, therapeutic communication, crisis care and psychiatric nursing documentation.", "url": "https://wtcs.pressbooks.pub/mentalhealthnursing/open/download?type=pdf", "icon": "🧠"}, {"field": "Nursing", "specialty": "Nursing Management", "title": "Nursing Management and Professional Concepts", "type": "Free PDF / Open RN OER", "note": "Leadership, delegation, quality, safety, professional practice and teamwork.", "url": "https://wtcs.pressbooks.pub/nursingmanagement/open/download?type=pdf", "icon": "📋"}, {"field": "Nursing", "specialty": "Clinical Procedures", "title": "Clinical Procedures for Safer Patient Care", "type": "Free PDF / BCcampus open textbook", "note": "Practical clinical procedures, infection control, safety and patient care workflows.", "url": "https://opentextbc.ca/clinicalskills/open/download?type=pdf", "icon": "🏥"}, {"field": "Nursing", "specialty": "Vital Signs", "title": "Vital Sign Measurement Across the Lifespan", "type": "Free PDF / open textbook", "note": "Vital sign measurement, interpretation and documentation for nursing and allied health learners.", "url": "https://pressbooks.library.torontomu.ca/vitalsign/open/download?type=pdf", "icon": "🌡️"}, {"field": "Medicine", "specialty": "Anatomy", "title": "Anatomy and Physiology 2e", "type": "Free PDF / OpenStax open textbook", "note": "Foundational anatomy and physiology textbook with official free PDF access.", "url": "https://openstax.org/details/books/anatomy-and-physiology-2e", "icon": "🫀"}, {"field": "Medicine", "specialty": "Anatomy", "title": "Anatomy and Physiology I Lab Manual", "type": "Free PDF / LibreTexts OER", "note": "Open lab manual for anatomy and physiology practice.", "url": "https://bio.libretexts.org/Bookshelves/Anatomy_and_Physiology/Anatomy_and_Physiology_I_Lab_Manual_(Robinson)", "icon": "🦴"}, {"field": "Medicine", "specialty": "Physiology", "title": "Human Physiology", "type": "Free PDF / open textbook source", "note": "Open physiology learning resource for body systems and function.", "url": "https://phys.libretexts.org/Bookshelves/Human_Biology/Human_Physiology_(Wakim_and_Grewal)", "icon": "🫁"}, {"field": "Medicine", "specialty": "Microbiology", "title": "Microbiology", "type": "Free PDF / OpenStax open textbook", "note": "Core microbiology textbook for health science learners.", "url": "https://openstax.org/details/books/microbiology", "icon": "🦠"}, {"field": "Medicine", "specialty": "Microbiology", "title": "Medical Microbiology", "type": "Free online book / NCBI Bookshelf", "note": "Classic NCBI Bookshelf medical microbiology reference. Free legal access; PDF available when enabled by NCBI.", "url": "https://www.ncbi.nlm.nih.gov/books/NBK7627/", "icon": "🔬"}, {"field": "Medicine", "specialty": "Immunology", "title": "Immunobiology", "type": "Free online book / NCBI Bookshelf", "note": "Open immunology reference covering immune system structure, function and disease.", "url": "https://www.ncbi.nlm.nih.gov/books/NBK10757/", "icon": "🧬"}, {"field": "Medicine", "specialty": "Cell Biology", "title": "Molecular Biology of the Cell", "type": "Free online book / NCBI Bookshelf", "note": "Foundational molecular and cell biology reference for biomedical sciences.", "url": "https://www.ncbi.nlm.nih.gov/books/NBK21054/", "icon": "🧫"}, {"field": "Medicine", "specialty": "Cell Biology", "title": "The Cell: A Molecular Approach", "type": "Free online book / NCBI Bookshelf", "note": "Molecular cell biology concepts, organelles, signaling and disease mechanisms.", "url": "https://www.ncbi.nlm.nih.gov/books/NBK9839/", "icon": "🧪"}, {"field": "Medicine", "specialty": "Genetics", "title": "Medical Genetics Summaries", "type": "Free online book / NCBI Bookshelf", "note": "Genomic medicine, pharmacogenomics and clinical genetics summaries.", "url": "https://www.ncbi.nlm.nih.gov/books/NBK61999/", "icon": "🧬"}, {"field": "Medicine", "specialty": "Genetics", "title": "GeneReviews", "type": "Free online book / NCBI Bookshelf", "note": "Expert-authored genetic disease chapters for clinical and academic reference.", "url": "https://www.ncbi.nlm.nih.gov/books/NBK1116/", "icon": "🧬"}, {"field": "Medicine", "specialty": "Psychology / Behavioral Health", "title": "Psychology 2e", "type": "Free PDF / OpenStax open textbook", "note": "Behavioral science foundation useful for psychology, psychiatry and patient communication modules.", "url": "https://openstax.org/details/books/psychology-2e", "icon": "🧠"}, {"field": "Medicine", "specialty": "Pediatrics", "title": "Pocket Book of Hospital Care for Children", "type": "Free PDF / WHO", "note": "WHO pediatric hospital care guide for common childhood illness management.", "url": "https://iris.who.int/bitstream/handle/10665/81170/9789241548373_eng.pdf", "icon": "👶"}, {"field": "Medicine", "specialty": "Emergency Medicine", "title": "Basic Emergency Care: Approach to the Acutely Ill and Injured", "type": "Free PDF / WHO-ICRC", "note": "Emergency assessment and care approach for acute illness and injury.", "url": "https://iris.who.int/bitstream/handle/10665/275635/9789241513081-eng.pdf", "icon": "🚑"}, {"field": "Medicine", "specialty": "Surgery", "title": "WHO Surgical Safety Checklist and Implementation Manual", "type": "Free PDF / WHO", "note": "Surgical safety, sign-in, time-out, sign-out and perioperative safety checklist education.", "url": "https://iris.who.int/bitstream/handle/10665/44186/9789241598590_eng.pdf", "icon": "🏨"}, {"field": "Medicine", "specialty": "Mental Health", "title": "mhGAP Intervention Guide", "type": "Free PDF / WHO", "note": "WHO guide for mental, neurological and substance use conditions in non-specialized settings.", "url": "https://iris.who.int/bitstream/handle/10665/250239/9789241549790-eng.pdf", "icon": "🧠"}, {"field": "Health Information Management & Medical Records", "specialty": "Medical Coding", "title": "ICD-10-CM Official Guidelines for Coding and Reporting", "type": "Free PDF / CDC-CMS official guideline", "note": "Official diagnosis coding guideline source for ICD-10-CM training and coding practice. Verify the current fiscal year before real coding use.", "url": "https://www.cms.gov/medicare/coding-billing/icd-10-codes/icd-10-cm-files", "icon": "🏷️"}, {"field": "Health Information Management & Medical Records", "specialty": "Procedure Coding", "title": "ICD-10-PCS Official Guidelines for Coding and Reporting", "type": "Free PDF / CMS official guideline", "note": "Official inpatient procedure coding guideline source for ICD-10-PCS education.", "url": "https://www.cms.gov/medicare/coding-billing/icd-10-codes/icd-10-pcs-files", "icon": "🧾"}, {"field": "Health Information Management & Medical Records", "specialty": "Mortality Coding", "title": "Physicians’ Handbook on Medical Certification of Death", "type": "Free PDF / CDC-NCHS", "note": "Death certification and cause-of-death sequence guidance for mortality coding education.", "url": "https://www.cdc.gov/nchs/data/misc/hb_cod.pdf", "icon": "⚰️"}, {"field": "Health Information Management & Medical Records", "specialty": "Health Statistics", "title": "International Statistical Classification of Diseases and Related Health Problems ICD-10 Volume 2 Instruction Manual", "type": "Free PDF / WHO", "note": "ICD rules, certification, mortality/morbidity coding concepts and statistical classification guidance.", "url": "https://iris.who.int/bitstream/handle/10665/246208/9789241549165-V2-eng.pdf", "icon": "📊"}, {"field": "Health Information Management & Medical Records", "specialty": "Health Records & Privacy", "title": "HIPAA Privacy Rule Summary", "type": "Free official resource / HHS", "note": "Official privacy rule summary for health information privacy education.", "url": "https://www.hhs.gov/hipaa/for-professionals/privacy/laws-regulations/index.html", "icon": "🔐"}, {"field": "Health Information Management & Medical Records", "specialty": "Data Quality", "title": "Data Quality and Integrity in Health Information", "type": "Free official policy resource / AHIMA", "note": "Health information data quality, integrity, patient matching and documentation quality reference.", "url": "https://www.ahima.org/advocacy/policy-statements/data-quality-and-integrity/", "icon": "✅"}, {"field": "Medical Technology & Digital Health", "specialty": "Digital Health", "title": "Global Strategy on Digital Health 2020–2025", "type": "Free PDF / WHO", "note": "WHO strategy for digital health, governance, interoperability and digital transformation.", "url": "https://iris.who.int/bitstream/handle/10665/344249/9789240020924-eng.pdf", "icon": "🌐"}, {"field": "Medical Technology & Digital Health", "specialty": "Digital Health", "title": "WHO Guideline: Recommendations on Digital Interventions for Health System Strengthening", "type": "Free PDF / WHO", "note": "Digital health interventions, implementation considerations and health system strengthening.", "url": "https://iris.who.int/bitstream/handle/10665/311941/9789241550505-eng.pdf", "icon": "📱"}, {"field": "Medical Technology & Digital Health", "specialty": "Digital Health Classification", "title": "Classification of Digital Health Interventions v1.0", "type": "Free PDF / WHO", "note": "Structured taxonomy for digital health interventions and functions.", "url": "https://iris.who.int/bitstream/handle/10665/260480/WHO-RHR-18.06-eng.pdf", "icon": "🗂️"}, {"field": "Medical Technology & Digital Health", "specialty": "Medical Device Software", "title": "Software as a Medical Device: Key Definitions", "type": "Free PDF / FDA/IMDRF", "note": "Key definitions for SaMD, medical device software and regulatory learning.", "url": "https://www.fda.gov/media/100714/download", "icon": "💻"}, {"field": "Medical Technology & Digital Health", "specialty": "Interoperability", "title": "HL7 FHIR Release 4 Specification", "type": "Free official standard / HL7", "note": "Official FHIR standard for health data exchange resources and APIs.", "url": "https://hl7.org/fhir/R4/", "icon": "🔗"}, {"field": "Medical Technology & Digital Health", "specialty": "Laboratory Standards", "title": "LOINC User Guide and Reference Resources", "type": "Free official standard / LOINC", "note": "Laboratory and clinical observation identifiers used in interoperable health systems.", "url": "https://loinc.org/downloads/", "icon": "🧪"}, {"field": "Radiology", "specialty": "Radiographic Anatomy", "title": "WHO Manual of Diagnostic Imaging: Radiographic Anatomy and Interpretation of the Chest and Pulmonary System", "type": "Free PDF / WHO", "note": "Diagnostic imaging interpretation reference for chest and pulmonary radiography.", "url": "https://iris.who.int/bitstream/handle/10665/42704/9241546778_eng.pdf", "icon": "🩻"}, {"field": "Radiology", "specialty": "Imaging Safety", "title": "Radiation Protection in Diagnostic and Interventional Radiology", "type": "Free PDF / IAEA", "note": "Radiation protection concepts for diagnostic and interventional radiology learners.", "url": "https://www.iaea.org/publications/14776/radiation-protection-and-safety-in-medical-uses-of-ionizing-radiation", "icon": "☢️"}, {"field": "Radiology", "specialty": "Imaging Standards", "title": "DICOM Standard", "type": "Free official standard / DICOM", "note": "Official medical imaging information standard used in PACS/RIS and imaging interoperability.", "url": "https://www.dicomstandard.org/current", "icon": "🖥️"}, {"field": "Laboratory Sciences", "specialty": "Laboratory Quality", "title": "Laboratory Quality Management System Handbook", "type": "Free PDF / WHO", "note": "Laboratory quality management, safety, process control and accreditation education.", "url": "https://iris.who.int/bitstream/handle/10665/44665/9789241548274_eng.pdf", "icon": "🧪"}, {"field": "Laboratory Sciences", "specialty": "Biosafety", "title": "Laboratory Biosafety Manual, 4th edition", "type": "Free PDF / WHO", "note": "Biosafety principles, risk assessment and safe laboratory operations.", "url": "https://iris.who.int/bitstream/handle/10665/337956/9789240011311-eng.pdf", "icon": "🧫"}, {"field": "Laboratory Sciences", "specialty": "Microbiology Lab", "title": "Basic Laboratory Procedures in Clinical Bacteriology", "type": "Free PDF / WHO", "note": "Clinical bacteriology laboratory procedures and basic microbiology methods.", "url": "https://iris.who.int/bitstream/handle/10665/42696/9241545453.pdf", "icon": "🦠"}, {"field": "Midwifery", "specialty": "Pregnancy & Childbirth", "title": "Pregnancy, Childbirth, Postpartum and Newborn Care: A Guide for Essential Practice", "type": "Free PDF / WHO", "note": "Essential maternal and newborn care guide for midwifery and obstetric learning.", "url": "https://iris.who.int/bitstream/handle/10665/249580/9789241549356-eng.pdf", "icon": "🤰"}, {"field": "Midwifery", "specialty": "Intrapartum Care", "title": "WHO Recommendations: Intrapartum Care for a Positive Childbirth Experience", "type": "Free PDF / WHO", "note": "Intrapartum care recommendations, labor management and respectful maternity care.", "url": "https://iris.who.int/bitstream/handle/10665/260178/9789241550215-eng.pdf", "icon": "👶"}, {"field": "Midwifery", "specialty": "Maternal Health", "title": "Managing Complications in Pregnancy and Childbirth", "type": "Free PDF / WHO", "note": "Emergency obstetric and newborn care management guide.", "url": "https://iris.who.int/bitstream/handle/10665/43972/9241545879_eng.pdf", "icon": "🚑"}, {"field": "Emergency Medical Services", "specialty": "Emergency Care", "title": "Basic Emergency Care: Approach to the Acutely Ill and Injured", "type": "Free PDF / WHO-ICRC", "note": "Core emergency care approach for EMS, emergency and acute care learners.", "url": "https://iris.who.int/bitstream/handle/10665/275635/9789241513081-eng.pdf", "icon": "🚑"}, {"field": "Emergency Medical Services", "specialty": "Trauma & Mass Casualty", "title": "Mass Casualty Management Systems", "type": "Free PDF / WHO", "note": "Planning and managing mass casualty events, triage and emergency response systems.", "url": "https://iris.who.int/bitstream/handle/10665/43804/9789241596053_eng.pdf", "icon": "🚨"}, {"field": "Emergency Medical Services", "specialty": "Prehospital Care", "title": "Prehospital Trauma Care Systems", "type": "Free PDF / WHO", "note": "Prehospital trauma care systems, response organization and trauma pathways.", "url": "https://iris.who.int/bitstream/handle/10665/43167/924159294X.pdf", "icon": "🚑"}, {"field": "Nutrition", "specialty": "Human Nutrition", "title": "Human Nutrition 2020e", "type": "Free PDF / University of Hawaiʻi OER", "note": "Open textbook covering nutrients, metabolism, diet and nutrition across the lifespan.", "url": "https://pressbooks.oer.hawaii.edu/humannutrition2/open/download?type=pdf", "icon": "🥗"}, {"field": "Nutrition", "specialty": "Infant & Young Child Feeding", "title": "Infant and Young Child Feeding: Model Chapter", "type": "Free PDF / WHO", "note": "Nutrition guidance for infant and young child feeding.", "url": "https://iris.who.int/bitstream/handle/10665/44117/9789241597494_eng.pdf", "icon": "🍼"}, {"field": "Nutrition", "specialty": "Malnutrition", "title": "Guideline: Updates on the Management of Severe Acute Malnutrition", "type": "Free PDF / WHO", "note": "Evidence-based guideline for severe acute malnutrition management.", "url": "https://iris.who.int/bitstream/handle/10665/95584/9789241506328_eng.pdf", "icon": "🍽️"}, {"field": "Dentistry", "specialty": "Oral Health", "title": "Oral Health Surveys: Basic Methods, 5th edition", "type": "Free PDF / WHO", "note": "Oral health survey methods, indices and public dental health assessment.", "url": "https://iris.who.int/bitstream/handle/10665/97035/9789241548649_eng.pdf", "icon": "🦷"}, {"field": "Dentistry", "specialty": "Oral Health", "title": "Oral Health in America: Advances and Challenges", "type": "Free online book / NCBI Bookshelf", "note": "Comprehensive U.S. report on oral health, dentistry, disparities and public health.", "url": "https://www.ncbi.nlm.nih.gov/books/NBK578297/", "icon": "🦷"}, {"field": "Dentistry", "specialty": "Dental Public Health", "title": "Ending Childhood Dental Caries: WHO Implementation Manual", "type": "Free PDF / WHO", "note": "Dental caries prevention, public health planning and oral health promotion.", "url": "https://iris.who.int/bitstream/handle/10665/330643/9789240000056-eng.pdf", "icon": "😁"}, {"field": "Public Health & Research", "specialty": "Epidemiology", "title": "Principles of Epidemiology in Public Health Practice, 3rd edition", "type": "Free PDF / CDC", "note": "Core epidemiology textbook for public health, surveillance and outbreak investigation.", "url": "https://www.cdc.gov/csels/dsepd/ss1978/SS1978.pdf", "icon": "📈"}, {"field": "Public Health & Research", "specialty": "Evidence-Based Practice", "title": "Introduction to Evidence-Based Practice", "type": "Free online book / Duke University Medical Center Library", "note": "Evidence-based practice concepts, searching and critical appraisal.", "url": "https://guides.mclibrary.duke.edu/ebm", "icon": "🔎"}, {"field": "Public Health & Research", "specialty": "Research Ethics", "title": "International Ethical Guidelines for Health-related Research Involving Humans", "type": "Free PDF / CIOMS-WHO", "note": "Research ethics reference for health-related studies involving human participants.", "url": "https://cioms.ch/wp-content/uploads/2017/01/WEB-CIOMS-EthicalGuidelines.pdf", "icon": "⚖️"}];
+    const fields = ['Choose main field', ...Array.from(new Set(libraryResources.map(r=>r.field)))];
+    const selectedField = state.libraryField || 'Choose main field';
+    const specialties = selectedField==='Choose main field' ? ['Choose specialty'] : ['Choose specialty', ...Array.from(new Set(libraryResources.filter(r=>r.field===selectedField).map(r=>r.specialty)))];
+    const selectedSpecialty = specialties.includes(state.librarySpecialty) ? state.librarySpecialty : 'Choose specialty';
+    const bookOptions = selectedSpecialty==='Choose specialty' ? ['All books in selected specialty'] : ['All books in selected specialty', ...libraryResources.filter(r=>r.field===selectedField && r.specialty===selectedSpecialty).map(r=>r.title)];
+    const selectedBook = bookOptions.includes(state.libraryBook) ? state.libraryBook : 'All books in selected specialty';
+    const searched = !!state.librarySearched;
+    let results = [];
+    if(searched && selectedField!=='Choose main field' && selectedSpecialty!=='Choose specialty'){
+      results = libraryResources.filter(r=>r.field===selectedField && r.specialty===selectedSpecialty && (selectedBook==='All books in selected specialty' || r.title===selectedBook));
+    }
+    return html`
+      <div class="library-hero card library-hero-compact">
+        <div>
+          <span class="pill success">Medical Library</span>
+          <h3>Free & Open PDF Medical Library</h3>
+          <p>Choose an academic field, specialty and book from dropdowns. This library now includes only legal free/open resources, official PDFs, open textbooks, NCBI Bookshelf titles, WHO/CDC/FDA standards and other open-access sources. Paid textbook links and unauthorized PDFs were removed.</p>
+        </div>
+        <div class="library-hero-art" aria-hidden="true"><span>📚</span><span>🩺</span><span>🧬</span></div>
+      </div>
+      <div class="card library-controls library-select-panel">
+        <div class="field"><label>1. Select main academic field</label><select id="libraryField">${fields.map(c=>`<option ${c===selectedField?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select></div>
+        <div class="field"><label>2. Select specialty / sub-field</label><select id="librarySpecialty">${specialties.map(c=>`<option ${c===selectedSpecialty?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select></div>
+        <div class="field"><label>3. Select book / resource</label><select id="libraryBook">${bookOptions.map(c=>`<option ${c===selectedBook?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select></div>
+        <div class="library-actions">
+          <button class="btn" id="findLibraryBooks">Find Selected Books</button>
+          <button class="btn outline" id="resetLibraryBooks">Reset</button>
+        </div>
+      </div>
+      ${!searched?`<div class="card library-empty-state"><div class="empty-icon">🔎</div><h3>Select a field and specialty to view free/open PDF resources</h3><p>Books are not displayed automatically. Choose a category such as Nursing, Medicine, Radiology, Laboratory Sciences, Midwifery, Emergency Medical Services, Nutrition, Dentistry, Medical Technology or Health Information Management, then click <strong>Find Selected Books</strong>. Only legal free/open PDF or open-access sources are included.</p></div>`:''}
+      ${searched && (selectedField==='Choose main field' || selectedSpecialty==='Choose specialty')?`<div class="card library-empty-state warning"><div class="empty-icon">⚠️</div><h3>Please complete the selections</h3><p>Select both a main academic field and a specialty before searching.</p></div>`:''}
+      ${searched && selectedField!=='Choose main field' && selectedSpecialty!=='Choose specialty'?`<div class="section-title"><div><h3>Selected resources</h3><p>${escapeHtml(selectedField)} • ${escapeHtml(selectedSpecialty)}${selectedBook!=='All books in selected specialty'?' • '+escapeHtml(selectedBook):''}</p></div><span class="pill success">${results.length} result${results.length===1?'':'s'}</span></div>`:''}
+      <div class="library-grid book-results-grid">
+        ${results.map(r=>`<article class="library-card book-card">
+          <div class="book-cover"><div class="book-icon">${escapeHtml(r.icon||'📘')}</div><div><b>${escapeHtml(r.specialty)}</b><small>${escapeHtml(r.field)}</small></div></div>
+          <div class="library-card-top"><span>${escapeHtml(r.field)}</span><b>${escapeHtml(r.type)}</b></div>
+          <h3>${escapeHtml(r.title)}</h3>
+          <p><strong>Specialty:</strong> ${escapeHtml(r.specialty)}</p>
+          <p>${escapeHtml(r.note)}</p>
+          <p class="source-note"><strong>Access:</strong> Legal free/open source. If the link opens a source page, use its official PDF/download button.</p>
+          <a class="btn small" href="${r.url}" target="_blank" rel="noopener noreferrer">Open Free PDF / Legal Source</a>
+        </article>`).join('')}
+      </div>
+      ${searched && selectedField!=='Choose main field' && selectedSpecialty!=='Choose specialty' && !results.length?`<div class="card"><h3>No resource found</h3><p>Choose another specialty or select “All books in selected specialty”.</p></div>`:''}
+    `;
+  }
+
+
+  function audit(){
+    const score = auditScore();
+    const openDocs = state.missingDocs.filter(d=>d.status!=='Completed');
+    const risk = score>=90 && openDocs.length===0 ? 'Low' : score>=75 ? 'Moderate' : score>=55 ? 'High' : 'Critical';
+    const riskClass = risk==='Low'?'success':risk==='Moderate'?'warning':'danger';
+    const pendingCritical = openDocs.filter(d=>/discharge|consent|operative|anesthesia|radiology|death|signature|coding/i.test(d.document));
+    const codingReady = score>=85 && !openDocs.some(d=>/discharge|diagnosis|operative|procedure|death|radiology|lab/i.test(d.document));
+    const auditReport = `DigiHealth Lab - Medical Records Audit Outcome\n\nPatient ID: ${state.patient.patientId}\nPatient status: ${state.patient.status}\nRecord completeness score: ${score}%\nRisk level: ${risk}\nOpen missing documents: ${openDocs.length ? openDocs.map(d=>`${d.document} (${d.unit} - ${d.status})`).join('; ') : 'None'}\nCritical follow-up items: ${pendingCritical.length ? pendingCritical.map(d=>d.document).join(', ') : 'None'}\nCoding readiness: ${codingReady ? 'Ready for coding review' : 'Not ready. Complete key documentation first.'}\nRecommended action: ${score>=90 && openDocs.length===0 ? 'Finalize record, archive and include in routine quality monitoring.' : 'Follow up responsible units, close missing documents, re-check signatures/dates and repeat audit before final coding or reporting.'}\n\nEducational purpose: This audit trains students to understand how incomplete documentation affects coding accuracy, patient safety, billing, legal readiness, data quality and hospital reporting.`;
+    return html`
+      <div class="grid cols-2">
+        <div class="card">
+          <div class="section-title" style="margin-top:0"><div><h3>Medical Records Audit Checklist</h3><p>Review completeness, compliance and documentation quality before coding, billing, archiving and reporting.</p></div><span class="pill ${score>=80?'success':score>=60?'warning':'danger'}">Score ${score}%</span></div>
+          <div class="progress"><span style="width:${score}%"></span></div>
+          <div class="checklist" style="margin-top:14px">
+            ${Object.entries(state.audit).map(([key,val])=>`<label class="check"><input type="checkbox" data-audit="${key}" ${val?'checked':''}/><span><strong>${key}</strong><small>${val?'Completed':'Pending or missing'}</small></span></label>`).join('')}
+          </div>
+          <button class="btn" id="saveAudit" style="margin-top:14px">Save Audit Progress</button>
+        </div>
+        <div class="card">
+          <h3>Missing Documents Tracker</h3>
+          <p class="mini">Use this tracker to assign each missing document to a responsible unit, follow it up and close the record before final coding, reporting or archive.</p>
+          <div class="form-grid">
+            <div class="field"><label>Document</label><input id="docName" placeholder="e.g. Discharge Summary"></div>
+            <div class="field"><label>Responsible unit</label><input id="docUnit" placeholder="e.g. Physician"></div>
+            <div class="field"><label>Status</label><select id="docStatus"><option>Pending</option><option>In progress</option><option>Returned</option><option>Completed</option><option>Escalated</option></select></div>
+            <div class="field"><label>Follow-up date</label><input id="docDate" type="date"></div>
+          </div>
+          <button class="btn" id="addDoc" style="margin-top:12px">Add Missing Document</button>
+          <div class="table-wrap" style="margin-top:16px"><table class="table"><thead><tr><th>Patient ID</th><th>Document</th><th>Unit</th><th>Status</th><th>Follow-up</th></tr></thead><tbody>${state.missingDocs.map(d=>`<tr><td>${d.patientId}</td><td>${d.document}</td><td>${d.unit}</td><td>${statusPill(d.status)}</td><td>${d.followUp}</td></tr>`).join('')}</tbody></table></div>
+        </div>
+      </div>
+
+      <div class="card audit-outcome-card" style="margin-top:18px">
+        <div class="section-title" style="margin-top:0"><div><h3>Final Audit Outcome</h3><p>This is the practical result of the audit. It tells the student whether the record is ready for coding, billing, archive and reporting.</p></div><span class="pill ${riskClass}">${risk} risk</span></div>
+        <div class="audit-result-grid">
+          <div class="audit-result-box"><span>📈</span><strong>${score}%</strong><small>Record completeness score</small></div>
+          <div class="audit-result-box"><span>⚠️</span><strong>${openDocs.length}</strong><small>Open missing documents</small></div>
+          <div class="audit-result-box"><span>🔥</span><strong>${pendingCritical.length}</strong><small>Critical follow-up items</small></div>
+          <div class="audit-result-box"><span>🧾</span><strong>${codingReady?'Ready':'Hold'}</strong><small>Coding readiness</small></div>
+        </div>
+        <div class="grid cols-3" style="margin-top:16px">
+          <div class="purpose-card"><h4>Why it matters</h4><p>Incomplete records can reduce coding accuracy, delay billing, weaken legal evidence, create patient-safety gaps and affect hospital statistics.</p></div>
+          <div class="purpose-card"><h4>What student learns</h4><p>How to identify missing documents, assign responsibility, monitor follow-up status and decide whether a record is ready for coding.</p></div>
+          <div class="purpose-card"><h4>Final output</h4><p>Completeness score, risk level, missing document list, responsible units, recommendations and a portfolio-ready audit report.</p></div>
+        </div>
+        <div class="report-box" style="margin-top:16px"><pre id="auditReportText">${auditReport}</pre></div>
+        <button class="btn outline" id="copyAuditReport" style="margin-top:12px">Copy Audit Outcome Report</button>
+      </div>
+    `;
+  }
+
+  function telehealth(){
+    if(!state.telehealth) state.telehealth = {stage:'Pre-visit', checks:{identity:true, consent:false, privacy:false, vitals:true, meds:false, note:false, followup:false, escalation:false}, visitMode:'Video consultation', device:'Patient portal + mobile app', rpm:'Fasting glucose 168 mg/dL; BP 138/84; Weight 76 kg', complaint:'Diabetes follow-up and medication review', assessment:'Type 2 diabetes follow-up. No chest pain or severe hypoglycemia reported.', plan:'Review home glucose log, reinforce medication adherence, schedule lab HbA1c, provide follow-up instructions.', privacy:'Patient is alone in a private room and agrees to continue.', outcome:'Follow-up required'};
+    const th = state.telehealth;
+    if(th.stage === 'RPM Review') th.stage = 'Remote Patient Monitoring Review';
+    const teleStages = ['Pre-visit','Check-in','Consultation','Remote Patient Monitoring Review','Documentation','Follow-up'];
+    const teleIcons = ['📅','🪪','👩‍⚕️','📈','📝','✅'];
+    if(!teleStages.includes(th.stage)) th.stage='Pre-visit';
+    const stageDetails = {
+      'Pre-visit': {
+        title:'Pre-visit Preparation',
+        objective:'Prepare the virtual appointment before the patient joins the session.',
+        tasks:['Review appointment reason and patient record','Check whether the patient has an active portal or telehealth link','Confirm required consent policy','Prepare previous labs, medication list and remote monitoring data'],
+        output:'Ready-to-start virtual visit with appointment context and pre-visit information available.',
+        checklist:['Appointment confirmed','Patient portal/link available','Previous record reviewed','Required pre-visit data prepared']
+      },
+      'Check-in': {
+        title:'Patient Check-in and Identity Verification',
+        objective:'Confirm patient identity, location, consent and privacy before the consultation begins.',
+        tasks:['Verify patient name, date of birth and patient identifier','Ask the patient to confirm current location','Document telehealth consent','Check privacy environment and emergency contact if needed'],
+        output:'Identity and consent are documented before clinical discussion starts.',
+        checklist:['Identity verified','Telehealth consent recorded','Privacy environment checked','Emergency/escalation information available']
+      },
+      'Consultation': {
+        title:'Virtual Clinical Consultation',
+        objective:'Document the reason for visit, symptoms, history, assessment and care limitations.',
+        tasks:['Document chief complaint and history of present illness','Review medication adherence and allergies','Record clinical assessment','Identify red flags that require in-person or emergency care'],
+        output:'Complete virtual visit clinical note with assessment and care plan.',
+        checklist:['Complaint documented','Assessment documented','Medication/allergy reviewed','Red flags assessed']
+      },
+      'Remote Patient Monitoring Review': {
+        title:'Remote Patient Monitoring Review',
+        objective:'Review mHealth, wearable or home monitoring data and connect it to the care plan.',
+        tasks:['Review home readings such as glucose, blood pressure, oxygen saturation or weight','Document abnormal values and trend changes','Check whether device data is patient-reported or device-integrated','Link RPM findings to follow-up actions'],
+        output:'RPM/mHealth data is reviewed, interpreted for documentation and connected to follow-up.',
+        checklist:['RPM values reviewed','Abnormal values flagged','Data source documented','Follow-up action linked']
+      },
+      'Documentation': {
+        title:'Telehealth Documentation Closure',
+        objective:'Complete the virtual visit note so it is suitable for EMR, audit and coding support.',
+        tasks:['Complete visit mode and technology used','Document consent, privacy, limitations and assessment','Record plan, patient education and follow-up','Check documentation completeness before closing the encounter'],
+        output:'Telehealth note is ready for audit, coding support and portfolio reporting.',
+        checklist:['Visit mode documented','Consent/privacy documented','Plan documented','Documentation checklist completed']
+      },
+      'Follow-up': {
+        title:'Follow-up and Continuity of Care',
+        objective:'Close the virtual encounter with clear next steps, patient instructions and escalation advice.',
+        tasks:['Schedule follow-up appointment or lab order','Document patient education','Provide warning signs and escalation instructions','Finalize telehealth simulation report'],
+        output:'Patient has documented follow-up plan and the student receives a visible simulation result.',
+        checklist:['Follow-up arranged','Patient education documented','Escalation advice recorded','Final report generated']
+      }
+    };
+    const activeStageIndex = teleStages.indexOf(th.stage);
+    const activeStage = stageDetails[th.stage];
+    const checks = [
+      ['identity','Patient identity confirmed','Name, DOB and patient identifier verified before remote care.'],
+      ['consent','Telehealth consent documented','Patient agrees to receive care through remote communication.'],
+      ['privacy','Privacy and environment checked','Patient is in a private setting; no unauthorized person is present.'],
+      ['vitals','Remote data reviewed','RPM or patient-reported vitals are reviewed and documented.'],
+      ['meds','Medication update reviewed','Current medicines, adherence, allergy and changes are documented.'],
+      ['note','Virtual visit note completed','Reason for visit, assessment, plan and limitations are recorded.'],
+      ['followup','Follow-up plan documented','Next appointment, labs, patient education and warning signs are documented.'],
+      ['escalation','Escalation rule checked','Red flags and emergency advice are considered and recorded.']
+    ];
+    const completed = checks.filter(c=>th.checks && th.checks[c[0]]).length;
+    const score = pct(completed, checks.length);
+    const risk = score>=90?'Low':score>=70?'Moderate':score>=50?'High':'Critical';
+    const riskClass = risk==='Low'?'success':risk==='Moderate'?'warning':'danger';
+    const missing = checks.filter(c=>!(th.checks && th.checks[c[0]])).map(c=>c[1]);
+    const stageReqs = {'Pre-visit':['visitMode','device','complaint'], 'Check-in':['identityNote','consentStatus','privacy'], 'Consultation':['assessment','redFlags','plan'], 'Remote Patient Monitoring Review':['rpm','vitalsTrend'], 'Documentation':['complaint','assessment','plan','privacy','limitations'], 'Follow-up':['followupDate','patientEducation','escalationAdvice','outcome']};
+    const stageLabels = {visitMode:'Visit mode', device:'Digital tool', complaint:'Reason for virtual visit', identityNote:'Identity verification note', consentStatus:'Telehealth consent status', privacy:'Privacy/environment note', assessment:'Clinical assessment', redFlags:'Red flags / escalation screen', plan:'Care plan', rpm:'RPM / mHealth data', vitalsTrend:'Vitals trend interpretation', limitations:'Visit limitations', followupDate:'Follow-up date or instruction', patientEducation:'Patient education', escalationAdvice:'Escalation advice', outcome:'Outcome'};
+    const stageMissing = (stageReqs[th.stage]||[]).filter(k=>!String(th[k]||'').trim());
+    const stageReady = stageMissing.length===0;
+    const generatedStageOutput = stageReady ? `${th.stage} output generated: required workstation data is complete and the stage can be saved for audit and portfolio evidence.` : `Not ready yet. Complete these workstation inputs first: ${stageMissing.map(k=>stageLabels[k]||k).join(', ')}.`;
+    const teleReport = `DigiHealth Lab - Telehealth Simulation Result\n\nPatient: ${state.patient.name} (${state.patient.patientId})\nVisit mode: ${th.visitMode}\nDigital tool: ${th.device}\nScenario: Diabetes follow-up via telehealth\nCurrent telehealth stage: ${th.stage}\nTelehealth documentation score: ${score}%\nRisk level: ${risk}\nMissing requirements: ${missing.length ? missing.join(', ') : 'None'}\nRemote monitoring data: ${th.rpm}\nClinical assessment: ${th.assessment}\nPlan: ${th.plan}\nOutcome: ${th.outcome}\nRecommendation: ${score>=90 ? 'Telehealth documentation is complete for academic simulation. Proceed to audit/portfolio.' : 'Complete missing consent, privacy, medication, note, follow-up or escalation fields before closing the virtual visit.'}`;
+    return html`
+      <div class="tele-sim-hero card">
+        <div>
+          <span class="pill blue">Fully simulated virtual care workflow</span>
+          <h3>Telehealth & mHealth Simulator</h3>
+          <p>Practice a complete remote-care process from appointment preparation to identity verification, consent, virtual consultation, remote monitoring review, documentation, follow-up and audit readiness.</p>
+        </div>
+        <div class="tele-phone" aria-hidden="true"><div class="phone-top"></div><div class="phone-screen"><b>Virtual Visit</b><span>Patient Portal</span><i>RPM Data</i><i>Consent</i><i>Follow-up</i></div></div>
+      </div>
+
+      <div class="tele-stage-grid">
+        ${teleStages.map((s,i)=>`<button class="tele-stage ${th.stage===s?'active':''}" data-tele-stage="${s}"><span>${teleIcons[i]}</span><strong>${s}</strong><small>${th.stage===s?'Current stage':'Open stage'}</small></button>`).join('')}
+      </div>
+
+      <div class="card tele-stage-panel" style="margin-top:18px">
+        <div class="section-title" style="margin-top:0">
+          <div><h3>${activeStage.title}</h3><p>${activeStage.objective}</p></div>
+          <span class="pill blue">Step ${activeStageIndex+1} of ${teleStages.length}</span>
+        </div>
+        <div class="tele-stage-content">
+          <div>
+            <h4>Student tasks</h4>
+            <ul class="task-list">${activeStage.tasks.map(t=>`<li>${t}</li>`).join('')}</ul>
+          </div>
+          <div>
+            <h4>Expected output</h4>
+            <div class="expected-output-card ${stageReady?'ready':'blocked'}"><strong>${stageReady?'Output ready':'Missing workstation inputs'}</strong><p>${generatedStageOutput}</p></div>
+            <div class="stage-checks">${(stageReqs[th.stage]||[]).map(k=>`<span class="${String(th[k]||'').trim()?'done':'missing'}">${stageLabels[k]||k}</span>`).join('')}</div>
+            <p class="mini">Learning output: ${activeStage.output}</p>
+          </div>
+        </div>
+        <div class="hero-actions" style="margin-top:14px">
+          ${activeStageIndex>0?`<button class="btn outline" data-next-tele-stage="${teleStages[activeStageIndex-1]}">Previous Stage</button>`:''}
+          ${activeStageIndex<teleStages.length-1?`<button class="btn" data-next-tele-stage="${teleStages[activeStageIndex+1]}">Save & Go to Next Stage</button>`:`<button class="btn" id="saveTelehealthFinal">Finalize Telehealth Simulation</button>`}
+        </div>
+      </div>
+
+      <div class="grid cols-2" style="margin-top:18px">
+        <div class="card">
+          <div class="section-title" style="margin-top:0"><div><h3>Virtual Visit Workstation</h3><p>Complete the simulated encounter fields as if you were documenting a real virtual visit using fictional data.</p></div><span class="pill ${riskClass}">${score}% complete</span></div>
+          <div class="form-grid">
+            <div class="field"><label>Visit mode</label><select id="teleMode"><option ${th.visitMode==='Video consultation'?'selected':''}>Video consultation</option><option ${th.visitMode==='Phone consultation'?'selected':''}>Phone consultation</option><option ${th.visitMode==='Secure messaging'?'selected':''}>Secure messaging</option><option ${th.visitMode==='Hybrid telehealth'?'selected':''}>Hybrid telehealth</option></select></div>
+            <div class="field"><label>Digital tool</label><select id="teleDevice"><option ${th.device==='Patient portal + mobile app'?'selected':''}>Patient portal + mobile app</option><option ${th.device==='Remote glucose monitoring'?'selected':''}>Remote glucose monitoring</option><option ${th.device==='Wearable device dashboard'?'selected':''}>Wearable device dashboard</option><option ${th.device==='Secure hospital telehealth platform'?'selected':''}>Secure hospital telehealth platform</option></select></div>
+            <div class="field full"><label>Reason for virtual visit</label><input id="teleComplaint" value="${escapeHtml(th.complaint||'')}" placeholder="Reason for virtual visit"></div>
+            <div class="field full"><label>Remote monitoring data / mHealth data</label><textarea id="teleRpm" rows="3">${escapeHtml(th.rpm||'')}</textarea></div>
+            <div class="field full"><label>Clinical assessment</label><textarea id="teleAssessment" rows="4">${escapeHtml(th.assessment||'')}</textarea></div>
+            <div class="field full"><label>Care plan and follow-up</label><textarea id="telePlan" rows="4">${escapeHtml(th.plan||'')}</textarea></div>
+            <div class="field full"><label>Privacy/environment note</label><textarea id="telePrivacy" rows="3">${escapeHtml(th.privacy||'')}</textarea></div>
+            <div class="field full"><label>Identity verification note</label><input id="teleIdentity" value="${escapeHtml(th.identityNote||'')}" placeholder="Example: Patient confirmed full name, DOB and patient ID"/></div>
+            <div class="field"><label>Telehealth consent status</label><select id="teleConsent"><option ${th.consentStatus==='Consent documented'?'selected':''}>Consent documented</option><option ${th.consentStatus==='Consent pending'?'selected':''}>Consent pending</option><option ${th.consentStatus==='Consent refused'?'selected':''}>Consent refused</option></select></div>
+            <div class="field"><label>Vitals trend interpretation</label><input id="teleVitalsTrend" value="${escapeHtml(th.vitalsTrend||'')}" placeholder="Example: Glucose improving, BP stable"/></div>
+            <div class="field full"><label>Red flags / escalation screen</label><textarea id="teleRedFlags" rows="3">${escapeHtml(th.redFlags||'')}</textarea></div>
+            <div class="field full"><label>Visit limitations</label><textarea id="teleLimitations" rows="2">${escapeHtml(th.limitations||'')}</textarea></div>
+            <div class="field"><label>Follow-up date or instruction</label><input id="teleFollowupDate" value="${escapeHtml(th.followupDate||'')}" placeholder="Example: Review in 2 weeks"/></div>
+            <div class="field full"><label>Patient education</label><textarea id="teleEducation" rows="3">${escapeHtml(th.patientEducation||'')}</textarea></div>
+            <div class="field full"><label>Escalation advice</label><textarea id="teleEscalation" rows="3">${escapeHtml(th.escalationAdvice||'')}</textarea></div>
+            <div class="field"><label>Outcome</label><select id="teleOutcome"><option ${th.outcome==='Follow-up required'?'selected':''}>Follow-up required</option><option ${th.outcome==='Medication review only'?'selected':''}>Medication review only</option><option ${th.outcome==='Lab order required'?'selected':''}>Lab order required</option><option ${th.outcome==='Escalate to in-person care'?'selected':''}>Escalate to in-person care</option><option ${th.outcome==='Emergency referral'?'selected':''}>Emergency referral</option></select></div>
+          </div>
+          <button class="btn" id="saveTelehealth" style="margin-top:12px">Save Telehealth Simulation</button>
+        </div>
+        <div class="card">
+          <h3>Telehealth Documentation Checklist</h3>
+          <p class="mini">The simulator checks whether the virtual visit can be closed safely for academic documentation purposes.</p>
+          <div class="checklist tele-checklist">
+            ${checks.map(([key,label,help])=>`<label class="check"><input type="checkbox" data-tele-check="${key}" ${th.checks&&th.checks[key]?'checked':''}/><span><strong>${label}</strong><small>${help}</small></span></label>`).join('')}
+          </div>
+          <div class="tele-alert ${riskClass}"><strong>${risk} documentation risk</strong><p>${missing.length ? 'Missing: '+missing.join(', ') : 'All key telehealth documentation requirements are complete.'}</p></div>
+        </div>
+      </div>
+
+      <div class="grid cols-3" style="margin-top:18px">
+        <div class="card tele-mini"><h3>mHealth Data Flow</h3><p>Patient app or wearable → patient portal → telehealth visit note → EMR → audit/reporting.</p></div>
+        <div class="card tele-mini"><h3>Telehealth Safety</h3><p>Identity, consent, privacy, red flags, escalation and documentation limitations must be checked.</p></div>
+        <div class="card tele-mini"><h3>Student Output</h3><p>The final result is a telehealth score, missing requirements list, risk level, recommendation and portfolio-ready report.</p></div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <div class="section-title" style="margin-top:0"><div><h3>Telehealth Simulation Result</h3><p>Visible output for the student after completing the virtual care process.</p></div><span class="pill ${riskClass}">${score}%</span></div>
+        <div class="report-box"><pre id="teleReportText">${teleReport}</pre></div>
+        <button class="btn outline" id="copyTeleReport" style="margin-top:12px">Copy Telehealth Report</button>
+      </div>
+    `;
+  }
+
+  const quizCourseOrder = ['Medical Terminology','Medical Coding','Medical Technology','Health Technology Laws','Health Informatics Standards','Healthcare Data Analysis'];
+
+  const quizBaseBanks = {
+    'Medical Terminology': [
+      {q:'Which prefix means “fast”?', options:['brady-','tachy-','hypo-','peri-'], answer:'tachy-', explanation:'Tachy- means fast, as in tachycardia.'},
+      {q:'Which prefix means “slow”?', options:['brady-','hyper-','endo-','trans-'], answer:'brady-', explanation:'Brady- means slow, as in bradycardia.'},
+      {q:'Which suffix means “inflammation”?', options:['-itis','-ectomy','-algia','-oma'], answer:'-itis', explanation:'-itis indicates inflammation, such as gastritis or dermatitis.'},
+      {q:'Which suffix means “surgical removal”?', options:['-plasty','-ectomy','-scopy','-rrhea'], answer:'-ectomy', explanation:'-ectomy means surgical removal, such as appendectomy.'},
+      {q:'What does cardi/o refer to?', options:['Kidney','Heart','Liver','Lung'], answer:'Heart', explanation:'Cardi/o is the combining form for heart.'},
+      {q:'What does nephro/o or ren/o refer to?', options:['Kidney','Skin','Brain','Bone'], answer:'Kidney', explanation:'Nephr/o and ren/o refer to the kidney.'},
+      {q:'Which term means difficulty breathing?', options:['Dysphagia','Dyspnea','Dysuria','Dyspepsia'], answer:'Dyspnea', explanation:'Dyspnea means difficult or labored breathing.'},
+      {q:'Which abbreviation commonly means shortness of breath?', options:['SOB','NPO','PRN','CBC'], answer:'SOB', explanation:'SOB is commonly used for shortness of breath in clinical notes.'},
+      {q:'Which abbreviation means nothing by mouth?', options:['NPO','BP','HR','CT'], answer:'NPO', explanation:'NPO means nil per os, or nothing by mouth.'},
+      {q:'Which term means high blood pressure?', options:['Hypotension','Hypertension','Hyperglycemia','Hypoxemia'], answer:'Hypertension', explanation:'Hypertension means elevated blood pressure.'},
+      {q:'Which term means low blood glucose?', options:['Hypoglycemia','Hyperglycemia','Hypokalemia','Hypernatremia'], answer:'Hypoglycemia', explanation:'Hypoglycemia means low blood glucose.'},
+      {q:'Which body system is related to the lungs?', options:['Respiratory','Renal','Endocrine','Integumentary'], answer:'Respiratory', explanation:'The respiratory system includes the lungs and airways.'},
+      {q:'Which body system includes skin, hair and nails?', options:['Integumentary','Musculoskeletal','Cardiovascular','Neurological'], answer:'Integumentary', explanation:'The integumentary system includes skin, hair, nails and related structures.'},
+      {q:'Which term means pain in a joint?', options:['Arthralgia','Myalgia','Neuralgia','Otalgia'], answer:'Arthralgia', explanation:'Arthr/o means joint and -algia means pain.'},
+      {q:'Which term means muscle pain?', options:['Myalgia','Arthritis','Cephalalgia','Gastralgia'], answer:'Myalgia', explanation:'My/o means muscle and -algia means pain.'},
+      {q:'Which suffix means “visual examination”?', options:['-scopy','-graphy','-lysis','-pexy'], answer:'-scopy', explanation:'-scopy refers to visual examination, often using an instrument.'},
+      {q:'Which term means removal of the appendix?', options:['Appendectomy','Appendicitis','Appendicostomy','Appendoplasty'], answer:'Appendectomy', explanation:'Appendectomy means surgical removal of the appendix.'},
+      {q:'Which term means blood in urine?', options:['Hematuria','Dysuria','Polyuria','Anuria'], answer:'Hematuria', explanation:'Hemat/o means blood and -uria relates to urine.'},
+      {q:'Which abbreviation refers to complete blood count?', options:['CBC','CXR','ECG','MRI'], answer:'CBC', explanation:'CBC stands for complete blood count.'},
+      {q:'Which abbreviation refers to chest X-ray?', options:['CXR','CT','ECG','ABG'], answer:'CXR', explanation:'CXR is commonly used for chest X-ray.'},
+      {q:'Which term means enlarged liver?', options:['Hepatomegaly','Splenomegaly','Cardiomegaly','Nephromegaly'], answer:'Hepatomegaly', explanation:'Hepat/o means liver and -megaly means enlargement.'},
+      {q:'Which term means abnormal condition of stones?', options:['Lithiasis','Necrosis','Sclerosis','Cyanosis'], answer:'Lithiasis', explanation:'Lithiasis refers to formation or presence of stones.'},
+      {q:'Which term describes bluish discoloration due to low oxygen?', options:['Cyanosis','Erythema','Pallor','Jaundice'], answer:'Cyanosis', explanation:'Cyanosis is bluish discoloration often related to oxygenation problems.'},
+      {q:'Which term means yellow discoloration of the skin?', options:['Jaundice','Pallor','Cyanosis','Edema'], answer:'Jaundice', explanation:'Jaundice is yellow discoloration commonly associated with bilirubin.'},
+      {q:'Which term means swelling caused by fluid?', options:['Edema','Emesis','Erosion','Effusion'], answer:'Edema', explanation:'Edema means swelling caused by fluid accumulation.'}
+    ],
+    'Medical Coding': [
+      {q:'In inpatient coding, the principal diagnosis is generally the condition that is:', options:['Documented last in the chart','Responsible for admission after study','Most expensive medication','First symptom mentioned by nurse'], answer:'Responsible for admission after study', explanation:'Principal diagnosis is the condition established after study to be chiefly responsible for admission.'},
+      {q:'Which system is mainly used to classify diagnoses in ICD-10-CM practice?', options:['ICD-10-CM','LOINC','DICOM','HL7 v2'], answer:'ICD-10-CM', explanation:'ICD-10-CM is used for diagnosis classification in many coding education contexts.'},
+      {q:'Which coding system is commonly used for procedures and professional services in the United States?', options:['CPT','RxNorm','DICOM','SNOMED CT only'], answer:'CPT', explanation:'CPT is commonly used for reporting medical procedures and services.'},
+      {q:'Which standard is used for laboratory observations such as CBC or glucose measurement?', options:['LOINC','NDC','ATC','CPT only'], answer:'LOINC', explanation:'LOINC identifies laboratory tests, clinical observations and measurements.'},
+      {q:'Which vocabulary normalizes clinical drug names in the United States?', options:['RxNorm','DICOM','HL7 FHIR','ICD-10-PCS'], answer:'RxNorm', explanation:'RxNorm provides normalized names for clinical drugs.'},
+      {q:'Which code set identifies drug products using a labeler, product and package structure in the U.S.?', options:['NDC','LOINC','ICD-11','SNOMED CT'], answer:'NDC', explanation:'NDC is used to identify drug products and packages.'},
+      {q:'Which system classifies drugs by therapeutic and chemical groups internationally?', options:['ATC','DICOM','ICD-10-CM','CDA'], answer:'ATC', explanation:'ATC classifies medicines by anatomical, therapeutic and chemical properties.'},
+      {q:'A diagnosis mentioned only as “rule out pneumonia” should usually be:', options:['Coded as confirmed without review','Handled according to setting-specific official rules and documentation','Ignored in all cases','Changed to asthma'], answer:'Handled according to setting-specific official rules and documentation', explanation:'Suspected or ruled-out diagnoses require setting-specific coding guidance and careful documentation review.'},
+      {q:'A coding query is appropriate when documentation is:', options:['Clear, complete and consistent','Ambiguous, conflicting or incomplete','Only in printed format','Signed by a physician'], answer:'Ambiguous, conflicting or incomplete', explanation:'A query is used when clarification is needed for accurate coding.'},
+      {q:'Upcoding means:', options:['Assigning codes that overstate severity or services','Coding only outpatient visits','Using fewer codes than required','Removing all secondary diagnoses'], answer:'Assigning codes that overstate severity or services', explanation:'Upcoding is assigning codes that can inappropriately increase reimbursement or severity.'},
+      {q:'Downcoding means:', options:['Using a less specific/lower-level code than supported','Coding all procedures twice','Coding from lab results only','Using only SNOMED CT'], answer:'Using a less specific/lower-level code than supported', explanation:'Downcoding can understate the service, severity or documented condition.'},
+      {q:'What should a student coder do if sepsis is not confirmed by the physician?', options:['Automatically code sepsis','Send/prepare a coding query or seek clarification','Code all possible infections as sepsis','Use a drug code only'], answer:'Send/prepare a coding query or seek clarification', explanation:'Potential sepsis needs clear provider documentation before final coding.'},
+      {q:'A secondary diagnosis should generally be reported when it:', options:['Has no impact on care','Requires evaluation, treatment, monitoring or affects care','Appears only in family history','Is copied from an old problem list without relevance'], answer:'Requires evaluation, treatment, monitoring or affects care', explanation:'Secondary diagnoses should meet reporting criteria such as affecting patient care or resource use.'},
+      {q:'ICD-10-PCS is primarily associated with:', options:['Inpatient procedure coding','Drug package identification','Radiology image exchange','Lab test naming'], answer:'Inpatient procedure coding', explanation:'ICD-10-PCS is a procedure classification system used in inpatient coding contexts.'},
+      {q:'HCPCS Level II commonly reports:', options:['Products, supplies and services not included in CPT','Only diagnosis codes','Only lab observation names','Only imaging files'], answer:'Products, supplies and services not included in CPT', explanation:'HCPCS Level II includes many supplies, products and non-CPT services.'},
+      {q:'A code selected from a discharge summary should be supported by:', options:['Clinical documentation in the record','Student memory only','Patient social media','Billing preference only'], answer:'Clinical documentation in the record', explanation:'Coding must be based on documented evidence in the health record.'},
+      {q:'Which code system provides computable clinical concepts for EHR documentation and interoperability?', options:['SNOMED CT','NDC only','PACS','CSV'], answer:'SNOMED CT', explanation:'SNOMED CT is a clinical terminology used for coded clinical concepts.'},
+      {q:'A “combination code” can represent:', options:['Two or more related conditions or a condition with manifestation/complication','Only a patient ID','Only a medication package','Only a scanned form'], answer:'Two or more related conditions or a condition with manifestation/complication', explanation:'Combination codes can capture multiple related concepts in one code when appropriate.'},
+      {q:'What is a key purpose of coding guidelines?', options:['To support consistent, accurate code assignment','To replace physician documentation','To remove audit trails','To eliminate privacy rules'], answer:'To support consistent, accurate code assignment', explanation:'Coding guidelines promote consistency and accuracy.'},
+      {q:'Which item is not enough alone to code a diagnosis?', options:['A single abnormal lab value without provider interpretation','A signed diagnosis in discharge summary','A physician progress note diagnosis','A documented treated condition'], answer:'A single abnormal lab value without provider interpretation', explanation:'Abnormal results alone often require provider interpretation/documentation.'},
+      {q:'Which coding action best supports learning after a wrong answer?', options:['Review documentation and compare with answer key','Delete the case','Ignore missing codes','Use random codes'], answer:'Review documentation and compare with answer key', explanation:'Coding education should include review of evidence, rationale and correct answer.'},
+      {q:'A procedure code should match:', options:['The documented procedure performed','The student’s guess','The patient address','The color of the form'], answer:'The documented procedure performed', explanation:'Procedure coding must reflect the documented procedure.'},
+      {q:'Which code category is most related to medication classification rather than diagnosis?', options:['ATC','ICD-10-CM','ICD-11 chapter only','ICD-10-PCS'], answer:'ATC', explanation:'ATC is a drug classification system.'},
+      {q:'In coding practice, “extra codes” are codes that are:', options:['Selected but not supported/expected for the case','Always required','The only correct answers','Automatically added by pharmacy'], answer:'Selected but not supported/expected for the case', explanation:'Extra codes may reduce score because they are not supported by the case.'},
+      {q:'A complete coding result should show:', options:['Score, correct codes, missing codes, extra codes and recommendations','Only the student name','Only a password','Only a PDF icon'], answer:'Score, correct codes, missing codes, extra codes and recommendations', explanation:'Complete feedback helps the student understand performance and next steps.'}
+    ],
+    'Medical Technology': [
+      {q:'Which term refers to electronic medical records mainly within one organization?', options:['EMR','FHIR','NDC','ATC'], answer:'EMR', explanation:'EMR usually refers to electronic medical records within a care organization.'},
+      {q:'Which term often refers to a broader digital health record shareable across care settings?', options:['EHR','PACS','NPO','CPT'], answer:'EHR', explanation:'EHR is broader and supports sharing across settings.'},
+      {q:'What is HIS?', options:['Hospital Information System','Health Insurance Surgery','High Imaging Signal','Home Isolation Sheet'], answer:'Hospital Information System', explanation:'HIS supports hospital administrative and clinical workflows.'},
+      {q:'Which system is used in radiology workflow and image archiving?', options:['PACS','MPI','NDC','ATC'], answer:'PACS', explanation:'PACS stores and manages medical images.'},
+      {q:'Which module manages lab orders and results?', options:['LIS','RIS','PACS only','MPI only'], answer:'LIS', explanation:'LIS means Laboratory Information System.'},
+      {q:'Which module manages radiology scheduling and reports?', options:['RIS','LIS','RxNorm','ATC'], answer:'RIS', explanation:'RIS means Radiology Information System.'},
+      {q:'CPOE is used for:', options:['Computerized provider order entry','Manual paper archiving only','Drug package labeling','Image compression only'], answer:'Computerized provider order entry', explanation:'CPOE allows providers to enter orders electronically.'},
+      {q:'CDSS stands for:', options:['Clinical Decision Support System','Clinical Data Storage Sheet','Coding Diagnosis Summary System','Central Drug Sales Software'], answer:'Clinical Decision Support System', explanation:'CDSS supports clinical decisions through alerts, reminders or guidance.'},
+      {q:'A patient portal commonly allows patients to:', options:['View results, appointments and messages','Rewrite hospital billing rules','Delete audit logs','Change clinician signatures'], answer:'View results, appointments and messages', explanation:'Patient portals provide secure patient access to selected services and information.'},
+      {q:'Remote Patient Monitoring means:', options:['Collecting patient data outside the hospital for follow-up','Scanning paper files only','Coding surgery manually','Using only fax'], answer:'Collecting patient data outside the hospital for follow-up', explanation:'RPM uses devices and digital tools to monitor health data remotely.'},
+      {q:'mHealth refers to:', options:['Mobile health using phones or mobile devices','Manual health filing only','Medical hardware only','Monthly hospital billing'], answer:'Mobile health using phones or mobile devices', explanation:'mHealth uses mobile and wireless technologies for health.'},
+      {q:'Telemedicine is most directly related to:', options:['Remote clinical care delivery','Hospital cafeteria systems','Paper archive shelving','Manual appointment stickers'], answer:'Remote clinical care delivery', explanation:'Telemedicine commonly refers to remote clinical services.'},
+      {q:'Digital therapeutics usually refers to:', options:['Evidence-based software-driven therapeutic interventions','Any hospital website','A scanned consent form','A billing spreadsheet'], answer:'Evidence-based software-driven therapeutic interventions', explanation:'Digital therapeutics deliver interventions through software.'},
+      {q:'SaMD means:', options:['Software as a Medical Device','Storage as Medical Data','Surgery and Medication Database','Secure Access Medical Directory'], answer:'Software as a Medical Device', explanation:'SaMD is software intended for medical purposes without being part of hardware device.'},
+      {q:'Which technology can support medication safety by checking allergies?', options:['CDSS alert','Printer toner','Wall clock','Bed label only'], answer:'CDSS alert', explanation:'CDSS can generate allergy and interaction alerts.'},
+      {q:'An audit trail records:', options:['Who accessed or changed data and when','Only patient height','Only room temperature','Only public website visits'], answer:'Who accessed or changed data and when', explanation:'Audit trails support accountability and security monitoring.'},
+      {q:'Role-based access control means:', options:['Access is assigned according to user role and duties','Everyone sees everything','Passwords are shared','Only students can edit all records'], answer:'Access is assigned according to user role and duties', explanation:'RBAC limits access according to role and need.'},
+      {q:'A wearable device in digital health may capture:', options:['Heart rate, steps or oxygen saturation','Only printed signatures','Hospital invoice codes only','Patient nationality only'], answer:'Heart rate, steps or oxygen saturation', explanation:'Wearables collect physiological or activity data.'},
+      {q:'A dashboard is useful because it:', options:['Summarizes indicators visually for monitoring','Removes the need for data quality','Deletes patient records','Replaces consent'], answer:'Summarizes indicators visually for monitoring', explanation:'Dashboards visualize key indicators.'},
+      {q:'Cloud health data requires attention to:', options:['Security, privacy, access and governance','Paper folder color','Desk size','Printer brand'], answer:'Security, privacy, access and governance', explanation:'Cloud health systems require strong governance and security controls.'},
+      {q:'A unique patient identifier helps prevent:', options:['Duplicate and mismatched patient records','All medical errors automatically','All drug interactions automatically','Need for clinical notes'], answer:'Duplicate and mismatched patient records', explanation:'Unique identifiers support correct patient matching.'},
+      {q:'A barcode medication administration system supports:', options:['Right patient and right medication checks','Changing diagnosis codes automatically','Deleting pharmacy records','Telehealth consent only'], answer:'Right patient and right medication checks', explanation:'Barcode checks can support medication safety workflows.'},
+      {q:'Interoperability in medical technology means:', options:['Systems can exchange and use health information','Systems are always offline','All data is in one paper file','Only images can be printed'], answer:'Systems can exchange and use health information', explanation:'Interoperability includes exchange and meaningful use of data.'},
+      {q:'A downtime procedure is needed when:', options:['The HIS/EMR is unavailable','A user changes font size','A patient asks a question','A quiz is completed'], answer:'The HIS/EMR is unavailable', explanation:'Downtime procedures maintain safe workflow when systems are unavailable.'},
+      {q:'Device integration can reduce:', options:['Manual data entry and transcription errors','The need for privacy','All audit requirements','All coding rules'], answer:'Manual data entry and transcription errors', explanation:'Integration can send device data directly into systems, reducing manual entry.'}
+    ],
+    'Health Technology Laws': [
+      {q:'Confidentiality means:', options:['Protecting patient information from unauthorized disclosure','Sharing all records publicly','Deleting all records','Using one password for everyone'], answer:'Protecting patient information from unauthorized disclosure', explanation:'Confidentiality protects patient information.'},
+      {q:'Consent in digital health means:', options:['Permission for a specific use or service after information is provided','A password reset','A billing code','A lab test code'], answer:'Permission for a specific use or service after information is provided', explanation:'Consent should be informed and documented when required.'},
+      {q:'A data breach is:', options:['Unauthorized access, disclosure or loss of protected information','A normal scheduled backup','A printed appointment card','A completed quiz'], answer:'Unauthorized access, disclosure or loss of protected information', explanation:'A breach involves unauthorized exposure or loss of data.'},
+      {q:'Access control is used to:', options:['Limit system access to authorized users','Make all records public','Remove usernames','Replace medical terminology'], answer:'Limit system access to authorized users', explanation:'Access control protects systems and data.'},
+      {q:'Authentication confirms:', options:['Who the user is','Which drug class is selected','Which ward has more beds','Which code is longest'], answer:'Who the user is', explanation:'Authentication verifies identity, such as login credentials.'},
+      {q:'Authorization determines:', options:['What an authenticated user is allowed to do','The patient temperature','A lab normal range only','A diagnosis spelling'], answer:'What an authenticated user is allowed to do', explanation:'Authorization controls permissions after identity is verified.'},
+      {q:'The minimum necessary principle means:', options:['Use only the information needed for the task','Print all charts for everyone','Send all data to all departments','Share passwords to save time'], answer:'Use only the information needed for the task', explanation:'Minimum necessary limits data use or disclosure to what is needed.'},
+      {q:'De-identification means:', options:['Removing or reducing identifiers so a person is not readily identifiable','Deleting all clinical meaning','Changing the diagnosis code randomly','Printing a new form'], answer:'Removing or reducing identifiers so a person is not readily identifiable', explanation:'De-identification reduces privacy risk.'},
+      {q:'Anonymization means:', options:['Data cannot reasonably be linked back to an individual','Data is still fully named','Passwords are visible','All audit logs are removed'], answer:'Data cannot reasonably be linked back to an individual', explanation:'Anonymized data should not reasonably identify individuals.'},
+      {q:'Encryption protects data by:', options:['Transforming it into unreadable form without a key','Deleting it permanently','Printing it faster','Changing patient age'], answer:'Transforming it into unreadable form without a key', explanation:'Encryption helps protect data in storage or transmission.'},
+      {q:'An audit log supports:', options:['Accountability and investigation of access/activity','Diagnosis selection only','Medication dispensing only','Room cleaning only'], answer:'Accountability and investigation of access/activity', explanation:'Audit logs show who did what and when.'},
+      {q:'Sharing a patient screenshot in a class chat is:', options:['A privacy and confidentiality risk','Always acceptable','A coding requirement','A data quality improvement'], answer:'A privacy and confidentiality risk', explanation:'Screenshots may expose identifiable patient data.'},
+      {q:'Using another employee’s login is unsafe because it:', options:['Breaks accountability and access control','Improves audit trail accuracy','Is required for telehealth','Makes coding easier'], answer:'Breaks accountability and access control', explanation:'Shared logins undermine accountability.'},
+      {q:'Telehealth documentation should include:', options:['Identity confirmation and consent when required','Only patient favorite color','Only the app logo','Only a billing total'], answer:'Identity confirmation and consent when required', explanation:'Telehealth documentation should support identity, consent and clinical details.'},
+      {q:'Secondary use of health data for research should consider:', options:['Ethics approval, consent, de-identification and governance','Only font size','Only appointment time','Only device color'], answer:'Ethics approval, consent, de-identification and governance', explanation:'Research use needs ethical and governance safeguards.'},
+      {q:'Privacy by design means:', options:['Privacy is built into systems and workflows from the start','Privacy is added only after a breach','All access is unrestricted','Only paper records are protected'], answer:'Privacy is built into systems and workflows from the start', explanation:'Privacy by design embeds privacy protections early.'},
+      {q:'A strong password practice includes:', options:['Unique password and no sharing','Writing passwords on the screen','Using “123456”','Sharing with classmates'], answer:'Unique password and no sharing', explanation:'Strong passwords and no sharing reduce unauthorized access.'},
+      {q:'Data retention means:', options:['How long records are kept according to policy/law','How fast a record prints','The color of folder labels','The size of a tablet'], answer:'How long records are kept according to policy/law', explanation:'Retention policies define how long records are stored.'},
+      {q:'Data disposal should be:', options:['Secure and according to policy','Random and undocumented','Done by posting online','Only by renaming files'], answer:'Secure and according to policy', explanation:'Secure disposal prevents unauthorized recovery or disclosure.'},
+      {q:'A privacy incident should usually be:', options:['Reported through the approved process','Hidden from supervisors','Discussed publicly','Ignored if no one notices'], answer:'Reported through the approved process', explanation:'Incidents should be reported and managed properly.'},
+      {q:'Role-based access in a university simulator teaches:', options:['Different users should have different permissions','Every student should be admin','Access control is unnecessary','Passwords should be reused'], answer:'Different users should have different permissions', explanation:'RBAC demonstrates least privilege and appropriate access.'},
+      {q:'Patient rights in digital health may include:', options:['Access to information and privacy protections','Right to remove all audit logs','Right to use staff passwords','Right to alter official codes'], answer:'Access to information and privacy protections', explanation:'Patient rights often include access and privacy safeguards.'},
+      {q:'A secure messaging system is preferred over personal messaging apps because it:', options:['Provides controlled, auditable and safer communication','Has more emojis','Removes need for consent','Changes diagnosis codes'], answer:'Provides controlled, auditable and safer communication', explanation:'Secure platforms support healthcare privacy and auditability.'},
+      {q:'Ethical AI in healthcare should consider:', options:['Safety, fairness, transparency and human oversight','Only speed','Only attractive design','Only marketing'], answer:'Safety, fairness, transparency and human oversight', explanation:'Responsible AI requires governance and safeguards.'},
+      {q:'A policy is useful because it:', options:['Defines expected practice, responsibilities and compliance requirements','Replaces all training','Eliminates documentation','Makes all data public'], answer:'Defines expected practice, responsibilities and compliance requirements', explanation:'Policies guide compliant and safe practice.'}
+    ],
+    'Health Informatics Standards': [
+      {q:'FHIR is primarily a standard for:', options:['Electronic exchange of healthcare information','Drug package labeling only','Paper file shelving','Surgical instrument cleaning'], answer:'Electronic exchange of healthcare information', explanation:'FHIR supports standardized electronic health data exchange.'},
+      {q:'HL7 is associated with:', options:['Health data exchange standards','Medication shelf labels only','Privacy laws only','Hospital architecture'], answer:'Health data exchange standards', explanation:'HL7 develops standards for health information exchange.'},
+      {q:'SNOMED CT is best described as:', options:['Clinical terminology for coded clinical concepts','Image file compression only','Drug package number only','Hospital bed list only'], answer:'Clinical terminology for coded clinical concepts', explanation:'SNOMED CT supports clinical concepts and semantic interoperability.'},
+      {q:'LOINC is used for:', options:['Lab tests, clinical observations and measurements','Only diagnoses','Only images','Only passwords'], answer:'Lab tests, clinical observations and measurements', explanation:'LOINC identifies tests, observations, measurements and documents.'},
+      {q:'DICOM is used for:', options:['Medical imaging information and exchange','Drug classification','Diagnosis coding only','Student login'], answer:'Medical imaging information and exchange', explanation:'DICOM supports medical imaging workflows.'},
+      {q:'Semantic interoperability means:', options:['Systems understand the meaning of exchanged data','Systems only connect physically','Data is printed faster','All users have admin rights'], answer:'Systems understand the meaning of exchanged data', explanation:'Semantic interoperability requires shared meaning.'},
+      {q:'Syntactic interoperability means:', options:['Systems use compatible formats/structure for exchange','Systems share exactly the same meaning always','Systems use paper only','Systems delete metadata'], answer:'Systems use compatible formats/structure for exchange', explanation:'Syntactic interoperability concerns format and structure.'},
+      {q:'An API is:', options:['A defined interface for software systems to communicate','A diagnosis code','A surgical procedure','A paper form'], answer:'A defined interface for software systems to communicate', explanation:'APIs allow software systems to exchange functions/data.'},
+      {q:'JSON is commonly used as:', options:['A structured data format for APIs','An imaging device','A coding guideline only','A drug classification'], answer:'A structured data format for APIs', explanation:'JSON is often used in web APIs.'},
+      {q:'XML is:', options:['A markup format used in data exchange','A vital sign','A medication route','An operating room'], answer:'A markup format used in data exchange', explanation:'XML is a structured markup language used in many standards.'},
+      {q:'HL7 v2 messages are often used for:', options:['Hospital interfaces such as ADT, orders and results','Only patient education posters','Only surgical videos','Only social media'], answer:'Hospital interfaces such as ADT, orders and results', explanation:'HL7 v2 is widely used in hospital messaging.'},
+      {q:'CDA stands for:', options:['Clinical Document Architecture','Coding Drug Application','Clinical Diagnosis Algorithm','Central Data Archive only'], answer:'Clinical Document Architecture', explanation:'CDA is an HL7 document standard.'},
+      {q:'A FHIR Resource is:', options:['A modular data structure such as Patient or Observation','A hospital employee','A paper folder color','A drug dose only'], answer:'A modular data structure such as Patient or Observation', explanation:'FHIR uses resources to represent healthcare data.'},
+      {q:'The FHIR Patient resource represents:', options:['Patient demographic and identity data','Only CT images','Only drug classification','Only audit passwords'], answer:'Patient demographic and identity data', explanation:'Patient resource stores patient identity/demographic information.'},
+      {q:'The FHIR Observation resource can represent:', options:['Clinical observations such as lab results or vital signs','Only building maps','Only invoices','Only consent signatures'], answer:'Clinical observations such as lab results or vital signs', explanation:'Observation is used for measurements and observations.'},
+      {q:'Terminology mapping is used to:', options:['Link equivalent concepts across coding systems','Delete all codes','Create passwords','Measure blood pressure'], answer:'Link equivalent concepts across coding systems', explanation:'Mapping supports translation between terminologies.'},
+      {q:'A value set is:', options:['A defined list of codes for a specific purpose','A random patient list','A password list','A lab machine'], answer:'A defined list of codes for a specific purpose', explanation:'Value sets constrain allowed codes for a use case.'},
+      {q:'A code system is:', options:['A managed collection of codes and meanings','A hospital cafeteria system','A printer queue','A student group chat'], answer:'A managed collection of codes and meanings', explanation:'Code systems define codes and associated concepts.'},
+      {q:'openEHR is associated with:', options:['Health record information models and archetypes','Drug package numbers only','Radiology image pixels only','Manual paper filing only'], answer:'Health record information models and archetypes', explanation:'openEHR uses archetypes/templates for health record modeling.'},
+      {q:'Metadata means:', options:['Data describing data','A disease code only','A surgical procedure only','A password reset'], answer:'Data describing data', explanation:'Metadata describes data content, context, source or structure.'},
+      {q:'Data provenance means:', options:['Origin and history of data','Patient blood type only','Folder shelf number','Device color'], answer:'Origin and history of data', explanation:'Provenance supports trust and traceability.'},
+      {q:'Master Patient Index supports:', options:['Accurate patient identity matching','Drug chemistry classification','Image compression','Quiz scoring only'], answer:'Accurate patient identity matching', explanation:'MPI supports patient identity management.'},
+      {q:'Interoperability testing checks whether:', options:['Systems exchange and use data correctly','Students can memorize passwords','Printers use color ink','Rooms are cleaned'], answer:'Systems exchange and use data correctly', explanation:'Testing verifies exchange and behavior.'},
+      {q:'A terminology server supports:', options:['Searching, validating and translating codes','Cooking hospital meals','Printing appointment cards','Removing audit trails'], answer:'Searching, validating and translating codes', explanation:'Terminology servers help manage coded vocabularies.'},
+      {q:'Standardized data supports:', options:['Consistent reporting, analytics and exchange','More duplicate records','Less data quality','Uncontrolled access'], answer:'Consistent reporting, analytics and exchange', explanation:'Standards improve consistency and comparability.'}
+    ],
+    'Healthcare Data Analysis': [
+      {q:'Data accuracy means:', options:['Data correctly represents the real-world value','Data is always long','Data has many colors','Data is stored only on paper'], answer:'Data correctly represents the real-world value', explanation:'Accuracy is correctness of data.'},
+      {q:'Data completeness means:', options:['Required data fields are present','Data is encrypted only','Data is printed','Data has no metadata'], answer:'Required data fields are present', explanation:'Completeness measures whether needed data is available.'},
+      {q:'Data timeliness means:', options:['Data is available when needed','Data is always old','Data is deleted quickly','Data is typed in capital letters'], answer:'Data is available when needed', explanation:'Timeliness concerns availability at the right time.'},
+      {q:'Data consistency means:', options:['Data agrees across systems and records','Data is always duplicated','Data is always missing','Data cannot be validated'], answer:'Data agrees across systems and records', explanation:'Consistency supports reliable interpretation.'},
+      {q:'Data validity means:', options:['Data follows allowed formats, ranges or rules','Data is always private','Data is handwritten','Data is not stored'], answer:'Data follows allowed formats, ranges or rules', explanation:'Validity checks whether data fits rules.'},
+      {q:'Duplicate patient records can cause:', options:['Patient safety and data quality risks','Better interoperability always','Automatic privacy compliance','No workflow impact'], answer:'Patient safety and data quality risks', explanation:'Duplicates can split or confuse patient information.'},
+      {q:'A KPI is:', options:['Key performance indicator','Known patient identifier only','Keyboard processing input','Kidney pathology item'], answer:'Key performance indicator', explanation:'KPI is a measurable performance indicator.'},
+      {q:'A dashboard is used to:', options:['Visualize indicators and trends','Replace all data governance','Hide data quality issues','Create random codes'], answer:'Visualize indicators and trends', explanation:'Dashboards summarize data visually.'},
+      {q:'Data governance defines:', options:['Roles, rules and accountability for data','A surgical technique','A drug dose','A printer layout'], answer:'Roles, rules and accountability for data', explanation:'Governance sets responsibilities and rules.'},
+      {q:'Data stewardship means:', options:['Responsible management and oversight of data assets','Deleting all old data','Ignoring quality issues','Using unofficial codes'], answer:'Responsible management and oversight of data assets', explanation:'Stewards help maintain data quality and use.'},
+      {q:'ETL stands for:', options:['Extract, Transform, Load','Evaluate, Test, Login','Enter, Treat, Leave','Electronic Telehealth Law'], answer:'Extract, Transform, Load', explanation:'ETL moves and prepares data for systems or analytics.'},
+      {q:'A numerator in a rate is:', options:['The count of events of interest','The whole population denominator','A privacy policy','A code system'], answer:'The count of events of interest', explanation:'The numerator is the event count in rate calculation.'},
+      {q:'A denominator in a rate is:', options:['The population or total eligible cases','Only wrong answers','Only a diagnosis code','A password'], answer:'The population or total eligible cases', explanation:'The denominator is the base population for a rate.'},
+      {q:'Missing data can:', options:['Bias analysis and reduce reliability','Always improve quality','Guarantee accuracy','Replace audit trail'], answer:'Bias analysis and reduce reliability', explanation:'Missing data can distort results.'},
+      {q:'Data validation checks:', options:['Whether data meets required rules','Whether the logo is attractive','Whether a patient is happy','Whether a password is pretty'], answer:'Whether data meets required rules', explanation:'Validation confirms expected format/rules.'},
+      {q:'Data cleaning involves:', options:['Detecting and correcting data problems','Removing all useful data','Changing all diagnosis meanings','Deleting audit logs'], answer:'Detecting and correcting data problems', explanation:'Cleaning improves data quality.'},
+      {q:'A trend analysis looks at:', options:['Change over time','Only one patient name','Only one password','Only one folder color'], answer:'Change over time', explanation:'Trend analysis examines patterns over time.'},
+      {q:'Outlier detection identifies:', options:['Values that are unusually different','All valid values','Only student emails','Only known diagnoses'], answer:'Values that are unusually different', explanation:'Outliers may indicate true rare events or data errors.'},
+      {q:'Bias in healthcare AI means:', options:['Systematic unfairness or error affecting outputs','Always a correct result','A type of lab test','A type of ward'], answer:'Systematic unfairness or error affecting outputs', explanation:'Bias can produce unfair or unsafe outcomes.'},
+      {q:'Model drift means:', options:['Model performance/data patterns change over time','The model always improves automatically','A printer moves','A patient changes bed'], answer:'Model performance/data patterns change over time', explanation:'Drift requires monitoring and recalibration.'},
+      {q:'Sensitivity measures:', options:['Ability to identify true positives','Ability to encrypt data','Number of pages printed','Password strength only'], answer:'Ability to identify true positives', explanation:'Sensitivity is true positive detection.'},
+      {q:'Specificity measures:', options:['Ability to identify true negatives','Number of database tables','Coding completeness only','Telehealth consent only'], answer:'Ability to identify true negatives', explanation:'Specificity is true negative detection.'},
+      {q:'A data dictionary contains:', options:['Definitions of data elements and fields','Only passwords','Only appointment stickers','Only building maps'], answer:'Definitions of data elements and fields', explanation:'Data dictionaries define data fields, meaning and format.'},
+      {q:'Record completeness score is useful for:', options:['Monitoring documentation quality','Removing the need for clinician notes','Replacing consent','Changing drug names'], answer:'Monitoring documentation quality', explanation:'Completeness scores support audit and improvement.'},
+      {q:'A recommendation after poor data quality should be:', options:['Review source documentation and correct missing/invalid fields','Ignore the issue','Share all data publicly','Delete all patients'], answer:'Review source documentation and correct missing/invalid fields', explanation:'Quality improvement requires correction and follow-up.'}
+    ]
+  };
+
+  function seededShuffle(items, seed){
+    const arr = [...items];
+    let s = seed || 1;
+    for(let i=arr.length-1;i>0;i--){
+      s = (s * 9301 + 49297) % 233280;
+      const j = s % (i+1);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+  function difficultyForIndex(n){
+    if(n <= 30) return 'Easy';
+    if(n <= 70) return 'Intermediate';
+    return 'Advanced';
+  }
+  function buildQuizItem(course, number, q, answer, distractors, explanation, topic){
+    const unique = [answer, ...distractors.filter(x=>x!==answer)].filter((v,i,a)=>a.indexOf(v)===i).slice(0,4);
+    while(unique.length < 4) unique.push(['None of the above','Documentation review required','Not enough information','Use official guideline'][unique.length-1]);
+    return {course, number, id:`${course.replace(/\W+/g,'_')}_${number}`, q, answer, options:seededShuffle(unique, number*17 + course.length), explanation, topic:topic || course, difficulty:difficultyForIndex(number)};
+  }
+  function expandTo100(course, seeds){
+    const out=[];
+    for(let i=0;i<100;i++){
+      const s = seeds[i % seeds.length];
+      const cycle = Math.floor(i / seeds.length);
+      let q=s.q;
+      if(cycle>0) q = q.replace(/\?$/, `?`);
+      out.push(buildQuizItem(course, i+1, q, s.answer, s.options, s.explanation, s.topic));
+    }
+    return out;
+  }
+  function allQuizQuestions(){
+    const terminologySeeds = [
+      {topic:'Prefixes', q:'Which prefix means fast in a clinical term such as tachycardia?', answer:'tachy-', options:['brady-','hypo-','peri-'], explanation:'Tachy- means fast. Tachycardia is a fast heart rate.'},
+      {topic:'Prefixes', q:'Which prefix means slow in a clinical term such as bradycardia?', answer:'brady-', options:['tachy-','hyper-','trans-'], explanation:'Brady- means slow. Bradycardia is a slow heart rate.'},
+      {topic:'Prefixes', q:'Which prefix means below normal or deficient?', answer:'hypo-', options:['hyper-','peri-','endo-'], explanation:'Hypo- means low, below or deficient.'},
+      {topic:'Prefixes', q:'Which prefix means above normal or excessive?', answer:'hyper-', options:['hypo-','sub-','inter-'], explanation:'Hyper- means high, above or excessive.'},
+      {topic:'Suffixes', q:'Which suffix means inflammation?', answer:'-itis', options:['-ectomy','-algia','-oma'], explanation:'-itis indicates inflammation, such as gastritis.'},
+      {topic:'Suffixes', q:'Which suffix means surgical removal?', answer:'-ectomy', options:['-scopy','-plasty','-rrhea'], explanation:'-ectomy means surgical excision or removal.'},
+      {topic:'Suffixes', q:'Which suffix means pain?', answer:'-algia', options:['-megaly','-lysis','-gram'], explanation:'-algia means pain, as in neuralgia or myalgia.'},
+      {topic:'Suffixes', q:'Which suffix means enlargement?', answer:'-megaly', options:['-penia','-stomy','-centesis'], explanation:'-megaly means enlargement, such as hepatomegaly.'},
+      {topic:'Roots', q:'What does cardi/o refer to?', answer:'Heart', options:['Kidney','Liver','Lung'], explanation:'Cardi/o is the combining form for heart.'},
+      {topic:'Roots', q:'What does pulmon/o refer to?', answer:'Lung', options:['Brain','Skin','Bone'], explanation:'Pulmon/o refers to the lung.'},
+      {topic:'Roots', q:'What does hepat/o refer to?', answer:'Liver', options:['Kidney','Spleen','Stomach'], explanation:'Hepat/o refers to the liver.'},
+      {topic:'Roots', q:'What does nephro/o or ren/o refer to?', answer:'Kidney', options:['Skin','Brain','Bone'], explanation:'Nephr/o and ren/o refer to the kidney.'},
+      {topic:'Clinical Terms', q:'Which term means difficulty breathing?', answer:'Dyspnea', options:['Dysphagia','Dysuria','Dyspepsia'], explanation:'Dyspnea means difficult or labored breathing.'},
+      {topic:'Clinical Terms', q:'Which term means blood in urine?', answer:'Hematuria', options:['Dysuria','Polyuria','Anuria'], explanation:'Hematuria combines hemat/o and -uria.'},
+      {topic:'Clinical Terms', q:'Which term means swelling caused by fluid accumulation?', answer:'Edema', options:['Emesis','Erosion','Effusion'], explanation:'Edema is swelling caused by fluid accumulation.'},
+      {topic:'Clinical Terms', q:'Which term describes bluish discoloration from low oxygenation?', answer:'Cyanosis', options:['Jaundice','Pallor','Erythema'], explanation:'Cyanosis is bluish discoloration often associated with oxygenation problems.'},
+      {topic:'Abbreviations', q:'Which abbreviation commonly means shortness of breath?', answer:'SOB', options:['NPO','PRN','CBC'], explanation:'SOB commonly means shortness of breath.'},
+      {topic:'Abbreviations', q:'Which abbreviation means nothing by mouth?', answer:'NPO', options:['BP','HR','CT'], explanation:'NPO means nil per os, nothing by mouth.'},
+      {topic:'Abbreviations', q:'Which abbreviation means complete blood count?', answer:'CBC', options:['CXR','ECG','MRI'], explanation:'CBC stands for complete blood count.'},
+      {topic:'Abbreviations', q:'Which abbreviation means chest X-ray?', answer:'CXR', options:['CT','ECG','ABG'], explanation:'CXR is a common abbreviation for chest X-ray.'},
+      {topic:'Body Systems', q:'Which body system includes lungs and airways?', answer:'Respiratory system', options:['Renal system','Endocrine system','Integumentary system'], explanation:'The respiratory system includes the lungs and airways.'},
+      {topic:'Body Systems', q:'Which body system includes skin, hair and nails?', answer:'Integumentary system', options:['Musculoskeletal system','Cardiovascular system','Neurological system'], explanation:'The integumentary system includes skin, hair and nails.'},
+      {topic:'Procedures', q:'Which term means surgical removal of the appendix?', answer:'Appendectomy', options:['Appendicitis','Appendicostomy','Appendoplasty'], explanation:'Appendectomy means removal of the appendix.'},
+      {topic:'Procedures', q:'Which suffix means visual examination using an instrument?', answer:'-scopy', options:['-graphy','-lysis','-pexy'], explanation:'-scopy refers to visual examination.'},
+      {topic:'Advanced Documentation', q:'In a progress note, which section usually describes the clinician’s interpretation of the patient problem?', answer:'Assessment', options:['Chief complaint','Medication list','Demographics'], explanation:'The assessment summarizes the clinician’s interpretation or diagnosis.'},
+      {topic:'Advanced Documentation', q:'Which term best describes a final summary of hospitalization and follow-up plan?', answer:'Discharge summary', options:['Triage note','Medication label','Specimen label'], explanation:'The discharge summary documents the hospital course, final diagnoses and follow-up.'},
+      {topic:'Advanced Documentation', q:'Which term indicates a patient’s current medications before a new encounter?', answer:'Medication history', options:['Operative count','Bed census','Archive index'], explanation:'Medication history lists medications taken before or at encounter.'},
+      {topic:'Advanced Documentation', q:'Which clinical term means yellow discoloration of skin or eyes?', answer:'Jaundice', options:['Cyanosis','Pallor','Edema'], explanation:'Jaundice is yellow discoloration commonly related to bilirubin.'},
+      {topic:'Advanced Documentation', q:'Which term means low blood oxygen level?', answer:'Hypoxemia', options:['Hyperkalemia','Hypoglycemia','Hypertension'], explanation:'Hypoxemia means low oxygen in the blood.'},
+      {topic:'Advanced Documentation', q:'Which term means enlarged liver?', answer:'Hepatomegaly', options:['Splenomegaly','Cardiomegaly','Nephromegaly'], explanation:'Hepatomegaly combines hepat/o and -megaly.'}
+    ];
+
+    const codingSeeds = [
+      {topic:'Principal Diagnosis', q:'In an inpatient case, the principal diagnosis is the condition that is chiefly responsible for what?', answer:'The admission after study', options:['The last note in the chart','The most expensive drug','The first nursing symptom'], explanation:'The principal diagnosis is established after study as chiefly responsible for admission.'},
+      {topic:'Primary Diagnosis', q:'In an outpatient visit, the first-listed diagnosis usually represents what?', answer:'The main reason for the encounter', options:['Any old history only','The billing clerk preference','The last lab test'], explanation:'Outpatient first-listed diagnosis usually reflects the main reason for the encounter.'},
+      {topic:'Secondary Diagnosis', q:'A secondary diagnosis should generally be coded when it does what?', answer:'Requires evaluation, treatment, monitoring or affects care', options:['Appears only in family history','Has no impact on care','Is copied from old record only'], explanation:'Secondary diagnoses should meet reporting criteria such as affecting care or resource use.'},
+      {topic:'Documentation', q:'If sepsis is suspected but not confirmed by the provider, what is the safest student coding action?', answer:'Prepare a coding query or seek clarification', options:['Automatically code sepsis','Code all infections as sepsis','Ignore all infection documentation'], explanation:'Ambiguous serious diagnoses require provider clarification.'},
+      {topic:'Diagnosis Classification', q:'Which code system is used for diagnosis classification in ICD-10-CM practice?', answer:'ICD-10-CM', options:['LOINC','DICOM','HL7 v2'], explanation:'ICD-10-CM is a diagnosis classification system.'},
+      {topic:'Procedure Coding', q:'Which code set is commonly used for professional procedures and services in the United States?', answer:'CPT', options:['RxNorm','DICOM','SNOMED CT only'], explanation:'CPT is used for reporting many procedures and services.'},
+      {topic:'Inpatient Procedures', q:'ICD-10-PCS is mainly associated with which type of coding?', answer:'Inpatient procedure coding', options:['Drug package identification','Radiology image exchange','Lab test naming'], explanation:'ICD-10-PCS is used for inpatient procedure coding contexts.'},
+      {topic:'HCPCS', q:'HCPCS Level II commonly reports what?', answer:'Products, supplies and non-CPT services', options:['Only diagnosis codes','Only lab observation names','Only imaging files'], explanation:'HCPCS Level II includes products, supplies and some services not in CPT.'},
+      {topic:'Laboratory Coding', q:'Which standard identifies laboratory observations such as glucose measurement?', answer:'LOINC', options:['NDC','ATC','CPT only'], explanation:'LOINC identifies lab tests and clinical observations.'},
+      {topic:'Drug Coding', q:'Which vocabulary normalizes clinical drug names in the United States?', answer:'RxNorm', options:['DICOM','HL7 FHIR','ICD-10-PCS'], explanation:'RxNorm provides normalized names for clinical drugs.'},
+      {topic:'Drug Coding', q:'Which identifier uses labeler, product and package structure for drug products in the U.S.?', answer:'NDC', options:['LOINC','ICD-11','SNOMED CT'], explanation:'NDC identifies drug products and packages.'},
+      {topic:'Drug Classification', q:'Which system classifies drugs by anatomical, therapeutic and chemical groups?', answer:'ATC', options:['DICOM','ICD-10-CM','CDA'], explanation:'ATC groups medicines by anatomical, therapeutic and chemical properties.'},
+      {topic:'Coding Compliance', q:'Upcoding means what?', answer:'Assigning codes that overstate severity or services', options:['Coding only outpatient visits','Using fewer codes than required','Removing all secondary diagnoses'], explanation:'Upcoding inappropriately overstates severity or service level.'},
+      {topic:'Coding Compliance', q:'Downcoding means what?', answer:'Using a less specific or lower-level code than supported', options:['Coding every procedure twice','Coding from lab results only','Using only SNOMED CT'], explanation:'Downcoding understates the documented service or severity.'},
+      {topic:'Coding Query', q:'A coding query is appropriate when documentation is what?', answer:'Ambiguous, conflicting or incomplete', options:['Clear and complete','Only printed','Signed and consistent'], explanation:'Queries clarify ambiguous, conflicting or incomplete documentation.'},
+      {topic:'Respiratory Coding', q:'A patient admitted for pneumonia with hypoxia has final pneumonia as the reason for admission. What is usually the principal diagnosis focus?', answer:'Pneumonia', options:['Hypoxia only','Old hypertension only','Routine medication refill'], explanation:'The condition chiefly responsible for admission after study is the principal focus.'},
+      {topic:'Circulatory Coding', q:'A patient admitted with NSTEMI and treated with cardiac monitoring should be coded with attention to what?', answer:'Confirmed acute myocardial infarction documentation', options:['Only family history','Only discharge medication count','Only outpatient appointment time'], explanation:'Acute MI coding requires confirmed provider documentation and encounter context.'},
+      {topic:'Surgery Coding', q:'For an appendectomy case, which documentation is most important for procedure coding?', answer:'Operative report', options:['Visitor log','Cafeteria receipt','Old appointment card'], explanation:'The operative report supports surgical procedure coding.'},
+      {topic:'Mortality Coding', q:'In mortality coding, the underlying cause of death is generally what?', answer:'The disease or injury that initiated the chain of events leading to death', options:['The last medication given only','The funeral location','The ward bed number'], explanation:'Underlying cause starts the causal sequence leading to death.'},
+      {topic:'Mortality Coding', q:'A death certificate cause sequence should show what relationship?', answer:'A logical causal chain from immediate cause to underlying cause', options:['Alphabetical diagnosis order','Only billing codes','Only nurse observations'], explanation:'Cause-of-death statements should form a causal sequence.'},
+      {topic:'External Cause', q:'External cause codes help describe what?', answer:'How an injury or external event happened', options:['Drug brand name only','Hospital room color','Lab machine type'], explanation:'External cause codes capture mechanism, place or circumstances of injury.'},
+      {topic:'Neoplasm Coding', q:'For neoplasm coding, which documentation detail is especially important?', answer:'Site and behavior of the tumor', options:['Patient shoe size','Bed occupancy rate','Printer name'], explanation:'Neoplasm codes depend on site, behavior and sometimes histology.'},
+      {topic:'Obstetric Coding', q:'For pregnancy coding, which detail is usually important?', answer:'Trimester or weeks of gestation', options:['Building floor','Archive shelf color','Printer brand'], explanation:'Pregnancy codes often require gestational age or trimester.'},
+      {topic:'Coding Readiness', q:'A record is not ready for final coding when which item is missing?', answer:'Final diagnosis or discharge summary clarification', options:['Hospital logo color','Cafeteria menu','Visitor parking ticket'], explanation:'Final coding needs adequate provider documentation.'},
+      {topic:'Advanced Case Logic', q:'If a condition is documented only in a lab result without provider interpretation, what should the coder avoid?', answer:'Coding it as a confirmed diagnosis without provider documentation', options:['Reading the chart','Checking official guidelines','Asking for clarification'], explanation:'Codes should be supported by provider documentation according to applicable rules.'}
+    ];
+
+    const technologySeeds = [
+      {topic:'EHR/EMR', q:'An EHR is best described as what?', answer:'A digital health record designed to support care across settings', options:['A paper-only file','A pharmacy shelf','A coding book only'], explanation:'EHRs support digital health information across care settings.'},
+      {topic:'EMR', q:'An EMR usually refers to what?', answer:'Electronic medical record within a provider organization', options:['Only a public health law','Only a wearable sensor','A paper archive box'], explanation:'EMR often refers to electronic records within an organization.'},
+      {topic:'HIS', q:'A Hospital Information System mainly supports what?', answer:'Administrative, clinical and operational hospital workflows', options:['Only social media posts','Only cafeteria menu design','Only building maintenance'], explanation:'HIS supports hospital workflows and information management.'},
+      {topic:'mHealth', q:'mHealth primarily uses what technology channel?', answer:'Mobile devices and applications', options:['Paper shelves only','Fax-only filing','Manual typewriters'], explanation:'mHealth involves mobile technologies for health.'},
+      {topic:'Telehealth', q:'Telehealth supports what type of service delivery?', answer:'Remote health services and communication', options:['Only in-person surgery','Only paper filing','Only parking management'], explanation:'Telehealth uses digital communication for remote care-related services.'},
+      {topic:'RPM', q:'Remote Patient Monitoring is used to do what?', answer:'Collect patient health data outside traditional clinical settings', options:['Assign archive shelf numbers','Print food orders only','Create building maps'], explanation:'RPM monitors patients remotely through connected devices or data reporting.'},
+      {topic:'CDSS', q:'A Clinical Decision Support System can provide what?', answer:'Alerts, reminders or evidence-based prompts', options:['Hospital cafeteria discounts','Random passwords','Medical waste bags only'], explanation:'CDSS supports clinical decisions using rules or knowledge.'},
+      {topic:'Patient Portal', q:'A patient portal allows patients to do what?', answer:'Access selected health information and communicate with care teams', options:['Change all hospital codes','Delete audit logs','Approve every medication'], explanation:'Portals support patient access and communication.'},
+      {topic:'AI in Healthcare', q:'AI-enabled triage tools require what type of oversight?', answer:'Clinical governance and safety monitoring', options:['No monitoring','Only graphic design review','No data quality checks'], explanation:'Healthcare AI requires governance, validation and safety monitoring.'},
+      {topic:'Interoperability', q:'Interoperability means systems can do what?', answer:'Exchange and use information meaningfully', options:['Store data in isolation only','Avoid all standards','Reject all external messages'], explanation:'Interoperability includes exchange and usable interpretation of data.'},
+      {topic:'Security', q:'Role-based access control does what?', answer:'Limits access based on user responsibilities', options:['Gives every user full access','Deletes patient records','Publishes passwords'], explanation:'RBAC supports privacy and least privilege.'},
+      {topic:'Audit Trail', q:'An audit trail records what?', answer:'User access and actions in the system', options:['Only room temperature','Only meal orders','Only parking tickets'], explanation:'Audit trails support accountability and investigation.'},
+      {topic:'Downtime', q:'Downtime procedure is needed when what happens?', answer:'The digital system is unavailable', options:['A font changes','A patient asks a question','A quiz is completed'], explanation:'Downtime plans maintain continuity during system outages.'},
+      {topic:'Implementation', q:'User acceptance testing checks whether what?', answer:'The system supports expected user workflows before go-live', options:['The logo is blue enough','All users know payroll','The cafeteria is open'], explanation:'UAT verifies workflows and readiness.'},
+      {topic:'Integration', q:'A system interface is used to do what?', answer:'Connect and exchange data between systems', options:['Archive paper boxes only','Provide lunch orders','Count chairs'], explanation:'Interfaces connect systems such as HIS, LIS, RIS and billing.'},
+      {topic:'Data Migration', q:'Data migration refers to what?', answer:'Moving data from one system to another', options:['Changing a patient’s bed only','Printing appointment cards','Cleaning a ward'], explanation:'Migration transfers data during system replacement or upgrade.'},
+      {topic:'Cloud Health IT', q:'A cloud-based health system requires special attention to what?', answer:'Security, availability and data protection controls', options:['Ink color only','Cafeteria menu','Paper drawer size'], explanation:'Cloud solutions require governance, security and continuity planning.'},
+      {topic:'Device Data', q:'Wearable device data used for care should be checked for what?', answer:'Accuracy, relevance and clinical workflow integration', options:['Fashion color only','Shoe size','Room decoration'], explanation:'Device data must be reliable and integrated into care workflow.'},
+      {topic:'Procurement', q:'Before selecting a digital health system, an organization should define what?', answer:'Requirements, workflows and evaluation criteria', options:['Only the vendor logo','Only staff uniforms','Only website colors'], explanation:'Requirements guide procurement and vendor evaluation.'},
+      {topic:'Maintenance', q:'A service level agreement usually defines what?', answer:'Support response time, uptime and responsibilities', options:['Birthday leave only','Patient diagnosis list only','Archive box color'], explanation:'SLAs define support expectations and responsibilities.'}
+    ];
+
+    const lawSeeds = [
+      {topic:'Confidentiality', q:'Patient confidentiality means what?', answer:'Protecting patient information from unauthorized disclosure', options:['Sharing records freely','Removing all access controls','Printing all records publicly'], explanation:'Confidentiality protects patient information.'},
+      {topic:'Consent', q:'In digital health, consent should be what?', answer:'Informed, documented and appropriate to the service', options:['Assumed for every use','Ignored if busy','Only verbal with no record always'], explanation:'Consent should be properly informed and documented according to policy.'},
+      {topic:'Access Control', q:'Least privilege means users should receive what?', answer:'Only access needed for their role', options:['Full access to all systems','No password ever','Administrator rights by default'], explanation:'Least privilege limits unnecessary access.'},
+      {topic:'Audit Log', q:'An audit log supports what?', answer:'Accountability for access and actions', options:['Meal ordering','Parking control only','Room painting'], explanation:'Audit logs show who accessed or changed information.'},
+      {topic:'Data Breach', q:'A data breach involves what?', answer:'Unauthorized access, use, disclosure or loss of protected information', options:['A scheduled backup','A printed blank form','A normal appointment'], explanation:'Breach events involve unauthorized exposure or loss.'},
+      {topic:'Privacy by Design', q:'Privacy by design means privacy is considered when?', answer:'From the beginning of system design and workflow planning', options:['Only after a breach','Only at system shutdown','Only after printing records'], explanation:'Privacy should be built into design and implementation.'},
+      {topic:'Research Ethics', q:'Research using patient data usually requires what?', answer:'Ethics approval or governance review when applicable', options:['No oversight','Social media approval','Only a personal notebook'], explanation:'Research with health data requires appropriate ethical and governance review.'},
+      {topic:'De-identification', q:'De-identification means what?', answer:'Removing or reducing identifiers to protect individuals', options:['Adding more names','Publishing ID numbers','Sharing photos openly'], explanation:'De-identification reduces privacy risk.'},
+      {topic:'Anonymization', q:'Anonymized data should mean what?', answer:'Individuals are not reasonably identifiable', options:['Names are highlighted','Records have more identifiers','Passwords are removed only'], explanation:'Anonymization aims to prevent identification.'},
+      {topic:'Data Retention', q:'Retention policy defines what?', answer:'How long records are kept and when disposition may occur', options:['Staff lunch time','Logo placement','Printer brand'], explanation:'Retention policies govern how long information is retained.'},
+      {topic:'Secure Disposal', q:'Secure disposal of health records requires what?', answer:'Authorized, documented and irreversible destruction process', options:['Throwing records in public bins','Leaving files in corridors','Posting files online'], explanation:'Secure disposal requires controlled and documented destruction.'},
+      {topic:'Breach Response', q:'A breach response plan should include what?', answer:'Reporting, containment, investigation and notification steps', options:['Ignore the event','Delete logs','Blame the patient'], explanation:'Breach response requires containment and formal procedures.'},
+      {topic:'Telehealth Law', q:'Telehealth documentation should include what privacy-related item?', answer:'Patient identity and consent for virtual service', options:['Only screen color','Only device brand','Only appointment sticker'], explanation:'Telehealth records should document identity and consent according to policy.'},
+      {topic:'Data Sharing', q:'Health data sharing should be based on what?', answer:'Legal basis, consent or permitted healthcare purpose', options:['Curiosity','Marketing preference only','Public social media requests'], explanation:'Sharing requires a valid basis and policy compliance.'},
+      {topic:'Security Incident', q:'A security incident is best described as what?', answer:'An event that may compromise information security', options:['A normal login only','A completed quiz','A changed wallpaper'], explanation:'Security incidents require review and possible escalation.'},
+      {topic:'Authentication', q:'Authentication verifies what?', answer:'The identity of a user or system', options:['The final diagnosis','The ward census','The brand of printer'], explanation:'Authentication confirms identity.'},
+      {topic:'Authorization', q:'Authorization determines what?', answer:'What an authenticated user is allowed to access or do', options:['A patient’s temperature','A drug dose only','A bed number only'], explanation:'Authorization controls permissions.'},
+      {topic:'Encryption', q:'Encryption protects data by doing what?', answer:'Transforming it into unreadable form without a key', options:['Deleting every record','Printing it on paper','Making it public'], explanation:'Encryption protects confidentiality during storage or transmission.'},
+      {topic:'Vendor Contract', q:'A health IT vendor contract should address what?', answer:'Privacy, security, support, data ownership and exit arrangements', options:['Only logo size','Only office decoration','Only social media likes'], explanation:'Contracts should define major responsibilities and safeguards.'},
+      {topic:'Patient Rights', q:'Patient access rights usually relate to what?', answer:'The ability to access or request health information according to law/policy', options:['Changing diagnosis codes at will','Deleting audit logs','Approving all staff salaries'], explanation:'Many frameworks include patient rights to access health information.'}
+    ];
+
+    const standardsSeeds = [
+      {topic:'HL7', q:'HL7 standards are mainly used for what?', answer:'Health information exchange between systems', options:['Surgical instrument sterilization','Food delivery','Parking systems'], explanation:'HL7 supports exchange of healthcare information.'},
+      {topic:'FHIR', q:'FHIR resources are designed to support what?', answer:'Modular exchange of healthcare data using modern web technologies', options:['Paper-only filing','Building security only','Drug manufacturing only'], explanation:'FHIR uses resources and APIs for health data exchange.'},
+      {topic:'SNOMED CT', q:'SNOMED CT is best described as what?', answer:'A clinical terminology for detailed healthcare concepts', options:['An imaging file format','A drug package code only','A printer protocol'], explanation:'SNOMED CT is a comprehensive clinical terminology.'},
+      {topic:'LOINC', q:'LOINC is especially important for what?', answer:'Laboratory tests and clinical observations', options:['Room cleaning schedules','Drug package barcodes only','Staff payroll'], explanation:'LOINC identifies lab and observation concepts.'},
+      {topic:'DICOM', q:'DICOM is used mainly for what?', answer:'Medical imaging information and image exchange', options:['Medication classification','Diagnosis billing only','Nursing shift rosters'], explanation:'DICOM is the standard for medical imaging information.'},
+      {topic:'API', q:'An API allows systems to do what?', answer:'Communicate through defined requests and responses', options:['Store paper charts only','Change clinical diagnoses automatically','Remove consent'], explanation:'APIs define communication between applications.'},
+      {topic:'Semantic Interoperability', q:'Semantic interoperability means what?', answer:'Systems understand the meaning of exchanged data', options:['Systems share colors only','Systems use no codes','Systems print labels'], explanation:'Semantic interoperability supports meaningful interpretation.'},
+      {topic:'Syntactic Interoperability', q:'Syntactic interoperability focuses on what?', answer:'Structure and format of exchanged data', options:['Clinical meaning only','Food menu style','Bed mattress type'], explanation:'Syntax concerns message format and structure.'},
+      {topic:'Terminology Mapping', q:'Terminology mapping is used to do what?', answer:'Relate concepts across different code systems', options:['Move beds between wards','Print visitor badges','Delete audit trails'], explanation:'Mapping links equivalent or related coded concepts.'},
+      {topic:'Value Set', q:'A value set is what?', answer:'A defined list of codes for a specific purpose', options:['A list of cafeterias','A password list','An archive shelf map only'], explanation:'Value sets constrain allowed codes for a use case.'},
+      {topic:'FHIR Patient', q:'The FHIR Patient resource generally represents what?', answer:'Demographic and administrative information about a patient', options:['Only lab machines','Only prescription packages','Only operating room tables'], explanation:'Patient resource carries patient identity and demographics.'},
+      {topic:'FHIR Observation', q:'The FHIR Observation resource can represent what?', answer:'Measurements such as vital signs or lab results', options:['Building addresses only','Vendor contracts only','Staff vacation days'], explanation:'Observation represents clinical measurements and findings.'},
+      {topic:'FHIR MedicationRequest', q:'A FHIR MedicationRequest generally represents what?', answer:'An order or request for medication', options:['A chest image file','A death certificate only','A ward cleaning record'], explanation:'MedicationRequest is used for medication orders/requests.'},
+      {topic:'Terminology Server', q:'A terminology server supports what?', answer:'Searching, validating and translating codes', options:['Operating room cleaning','Meal delivery','Parking payments'], explanation:'Terminology servers manage code system operations.'},
+      {topic:'Interoperability Testing', q:'Interoperability testing checks whether systems can do what?', answer:'Exchange and use data correctly', options:['Memorize passwords','Print colorful posters','Cook meals'], explanation:'Testing verifies exchange, format and behavior.'},
+      {topic:'Master Patient Index', q:'Master Patient Index supports what?', answer:'Accurate patient identity matching', options:['Drug chemistry classification','Image compression','Quiz scoring only'], explanation:'MPI supports patient identity management.'},
+      {topic:'Data Provenance', q:'Provenance means what in health data exchange?', answer:'Origin and history of data', options:['Folder shelf number','Device color','Patient meal choice'], explanation:'Provenance supports trust and traceability.'},
+      {topic:'Open Standards', q:'Open health standards help organizations avoid what?', answer:'Unnecessary vendor lock-in and inconsistent exchange', options:['All documentation','All clinical care','All data quality'], explanation:'Open standards improve portability and interoperability.'},
+      {topic:'Interface Engine', q:'An interface engine is used to do what?', answer:'Route, transform and monitor messages between systems', options:['Perform surgery','Dispense medicine directly','Scan paper charts only'], explanation:'Interface engines manage messages between systems.'},
+      {topic:'CDA', q:'Clinical Document Architecture is used for what?', answer:'Structured clinical documents', options:['Drug package labels only','Medical image pixels only','Ward meals'], explanation:'CDA supports structured clinical documents.'}
+    ];
+
+    const dataSeeds = [
+      {topic:'Data Quality', q:'Data accuracy means what?', answer:'Data correctly represents the real-world value', options:['Data is always long','Data has many colors','Data is stored only on paper'], explanation:'Accuracy is correctness of data.'},
+      {topic:'Data Quality', q:'Data completeness means what?', answer:'Required data fields are present', options:['Data is encrypted only','Data is printed','Data has no metadata'], explanation:'Completeness measures whether needed data is available.'},
+      {topic:'Data Quality', q:'Data timeliness means what?', answer:'Data is available when needed', options:['Data is always old','Data is deleted quickly','Data is typed in capital letters'], explanation:'Timeliness concerns availability at the right time.'},
+      {topic:'Data Quality', q:'Data consistency means what?', answer:'Data agrees across systems and records', options:['Data is always duplicated','Data is always missing','Data cannot be validated'], explanation:'Consistency supports reliable interpretation.'},
+      {topic:'Data Quality', q:'Data validity means what?', answer:'Data follows allowed formats, ranges or rules', options:['Data is always private','Data is handwritten','Data is not stored'], explanation:'Validity checks whether data fits rules.'},
+      {topic:'Patient Identity', q:'Duplicate patient records can cause what?', answer:'Patient safety and data quality risks', options:['Better interoperability always','Automatic privacy compliance','No workflow impact'], explanation:'Duplicates can split or confuse patient information.'},
+      {topic:'KPI', q:'A KPI is what?', answer:'Key performance indicator', options:['Known patient identifier only','Keyboard processing input','Kidney pathology item'], explanation:'KPI is a measurable performance indicator.'},
+      {topic:'Dashboard', q:'A dashboard is used to do what?', answer:'Visualize indicators and trends', options:['Replace all data governance','Hide data quality issues','Create random codes'], explanation:'Dashboards summarize data visually.'},
+      {topic:'Governance', q:'Data governance defines what?', answer:'Roles, rules and accountability for data', options:['A surgical technique','A drug dose','A printer layout'], explanation:'Governance sets responsibilities and rules.'},
+      {topic:'Stewardship', q:'Data stewardship means what?', answer:'Responsible management and oversight of data assets', options:['Deleting all old data','Ignoring quality issues','Using unofficial codes'], explanation:'Stewards help maintain data quality and use.'},
+      {topic:'ETL', q:'ETL stands for what?', answer:'Extract, Transform, Load', options:['Evaluate, Test, Login','Enter, Treat, Leave','Electronic Telehealth Law'], explanation:'ETL moves and prepares data for systems or analytics.'},
+      {topic:'Rates', q:'A numerator in a rate is what?', answer:'The count of events of interest', options:['The whole denominator','A privacy policy','A code system'], explanation:'The numerator is the event count.'},
+      {topic:'Rates', q:'A denominator in a rate is what?', answer:'The population or total eligible cases', options:['Only wrong answers','Only a diagnosis code','A password'], explanation:'The denominator is the base population.'},
+      {topic:'Missing Data', q:'Missing data can cause what?', answer:'Bias analysis and reduce reliability', options:['Always improve quality','Guarantee accuracy','Replace audit trail'], explanation:'Missing data can distort results.'},
+      {topic:'Validation', q:'Data validation checks what?', answer:'Whether data meets required rules', options:['Whether the logo is attractive','Whether a patient is happy','Whether a password is pretty'], explanation:'Validation confirms format and rules.'},
+      {topic:'Cleaning', q:'Data cleaning involves what?', answer:'Detecting and correcting data problems', options:['Removing all useful data','Changing diagnosis meanings','Deleting audit logs'], explanation:'Cleaning improves quality.'},
+      {topic:'Trend Analysis', q:'Trend analysis looks at what?', answer:'Change over time', options:['Only one patient name','Only one password','Only one folder color'], explanation:'Trend analysis examines patterns over time.'},
+      {topic:'Outliers', q:'Outlier detection identifies what?', answer:'Values that are unusually different', options:['All valid values','Only student emails','Only known diagnoses'], explanation:'Outliers may indicate rare events or data errors.'},
+      {topic:'AI Quality', q:'Bias in healthcare AI means what?', answer:'Systematic unfairness or error affecting outputs', options:['Always a correct result','A type of lab test','A type of ward'], explanation:'Bias can produce unfair or unsafe outcomes.'},
+      {topic:'AI Monitoring', q:'Model drift means what?', answer:'Model performance or data patterns change over time', options:['The model always improves automatically','A printer moves','A patient changes bed'], explanation:'Drift requires monitoring and recalibration.'},
+      {topic:'Performance Measures', q:'Sensitivity measures what?', answer:'Ability to identify true positives', options:['Ability to encrypt data','Number of pages printed','Password strength only'], explanation:'Sensitivity is true positive detection.'},
+      {topic:'Performance Measures', q:'Specificity measures what?', answer:'Ability to identify true negatives', options:['Number of database tables','Coding completeness only','Telehealth consent only'], explanation:'Specificity is true negative detection.'},
+      {topic:'Data Dictionary', q:'A data dictionary contains what?', answer:'Definitions of data elements and fields', options:['Only passwords','Only appointment stickers','Only building maps'], explanation:'Data dictionaries define fields, meaning and format.'},
+      {topic:'Quality Improvement', q:'A record completeness score is useful for what?', answer:'Monitoring documentation quality', options:['Removing clinician notes','Replacing consent','Changing drug names'], explanation:'Completeness scores support audit and improvement.'},
+      {topic:'Quality Improvement', q:'After poor data quality is found, the best next step is what?', answer:'Review source documentation and correct missing or invalid fields', options:['Ignore the issue','Share all data publicly','Delete all patients'], explanation:'Quality improvement requires correction and follow-up.'}
+    ];
+
+    function makeCourse(course, seeds){
+      const out = [];
+      for(let i=0;i<100;i++){
+        const s = seeds[i % seeds.length];
+        const cycle = Math.floor(i / seeds.length);
+        const level = difficultyForIndex(i+1);
+        let q = s.q;
+        if(cycle === 1) q = `Applied practice ${i+1}: ${s.q}`;
+        if(cycle === 2) q = `Case-based challenge ${i+1}: ${s.q}`;
+        if(cycle >= 3) q = `Advanced specialist question ${i+1}: ${s.q}`;
+        out.push(buildQuizItem(course, i+1, q, s.answer, s.options, s.explanation, s.topic));
+      }
+      return out;
+    }
+
+    return {
+      'Medical Terminology': makeCourse('Medical Terminology', terminologySeeds),
+      'Medical Coding': makeCourse('Medical Coding', codingSeeds),
+      'Medical Technology': makeCourse('Medical Technology', technologySeeds),
+      'Health Technology Laws': makeCourse('Health Technology Laws', lawSeeds),
+      'Health Informatics Standards': makeCourse('Health Informatics Standards', standardsSeeds),
+      'Healthcare Data Analysis': makeCourse('Healthcare Data Analysis', dataSeeds)
+    };
+  }
+  const quizQuestionLibrary = allQuizQuestions();
+  function ensureQuizGame(){
+    if(!state.quizGame) state.quizGame = structuredClone(defaultState.quizGame);
+    if(!state.quizGame.course) state.quizGame.course = quizCourseOrder[0];
+    if(!state.quizGame.results) state.quizGame.results = {};
+    return state.quizGame;
+  }
+  function quizPercent(qg){ return qg.answered ? Math.round((qg.score/qg.answered)*100) : 0; }
+  function getCourseQuestions(course){ return quizQuestionLibrary[course] || quizQuestionLibrary[quizCourseOrder[0]]; }
+  function miniQuiz(){
+    const qg = ensureQuizGame();
+    const questions = getCourseQuestions(qg.course);
+    if(qg.index >= questions.length) { qg.index = questions.length-1; qg.finished=true; }
+    const current = questions[qg.index] || questions[0];
+    const currentDifficulty = current.difficulty || difficultyForIndex(current.number || qg.index+1);
+    const difficultyEmoji = currentDifficulty === 'Easy' ? '🟢' : currentDifficulty === 'Intermediate' ? '🟡' : '🔴';
+    const progress = Math.round(((qg.index + (qg.feedback?1:0))/questions.length)*100);
+    const resultCards = quizCourseOrder.map(c=>{
+      const r=qg.results[c];
+      return `<div class="quiz-course-stat"><strong>${r?`${r.percent}%`:'Not started'}</strong><span>${c}</span><small>${r?`${r.score}/${r.answered} correct`:'100 questions available'}</small></div>`;
+    }).join('');
+    if(qg.finished){
+      return html`
+        <div class="quiz-hero card">
+          <div><span class="pill success">Game completed</span><h3>Mini Quiz Game Result</h3><p>You completed 100 questions for <strong>${qg.course}</strong>. Review your score below or restart another course.</p></div>
+          <div class="quiz-score-circle"><strong>${quizPercent(qg)}%</strong><span>${qg.score}/${qg.answered}</span></div>
+        </div>
+        <div class="grid cols-2" style="margin-top:18px">
+          <div class="card"><h3>Performance Summary</h3><div class="patient-row"><span>Course</span><strong>${qg.course}</strong></div><div class="patient-row"><span>Correct answers</span><strong>${qg.score}</strong></div><div class="patient-row"><span>Total answered</span><strong>${qg.answered}</strong></div><div class="patient-row"><span>Best streak</span><strong>${qg.bestStreak}</strong></div><div class="patient-row"><span>Recommendation</span><strong>${quizPercent(qg)>=85?'Excellent. Move to simulation and coding cases.':'Review explanations and repeat the course quiz.'}</strong></div></div>
+          <div class="card"><h3>Choose another course</h3><div class="field"><label>Course</label><select id="quizCourseSelect">${quizCourseOrder.map(c=>`<option ${c===qg.course?'selected':''}>${c}</option>`).join('')}</select></div><button class="btn" id="restartQuiz" style="margin-top:12px">Start / Restart Selected Course</button><button class="btn outline" data-go="dashboard" style="margin-top:12px">Back to Dashboard</button></div>
+        </div>
+        <div class="card" style="margin-top:18px"><h3>Saved Course Scores</h3><div class="quiz-course-grid">${resultCards}</div></div>`;
+    }
+    return html`
+      <div class="quiz-hero card">
+        <div>
+          <span class="pill success">Mini Quiz Game • 100 questions per course</span>
+          <h3>Play, answer, check and learn</h3>
+          <p>Choose a course and complete 100 non-repeating specialist questions. The pathway moves from Easy to Intermediate to Advanced, with instant feedback, encouragement and guidance after each answer.</p>
+        </div>
+        <div class="quiz-score-circle"><strong>${quizPercent(qg)}%</strong><span>${qg.score}/${qg.answered}</span></div>
+      </div>
+      <div class="quiz-shell" style="margin-top:18px">
+        <aside class="quiz-side card">
+          <h3>Course Selector</h3>
+          <div class="field"><label>Select course</label><select id="quizCourseSelect">${quizCourseOrder.map(c=>`<option ${c===qg.course?'selected':''}>${c}</option>`).join('')}</select></div>
+          <button class="btn full" id="restartQuiz">Start / Restart Course</button>
+          <div class="quiz-mini-stats"><div><b>${qg.index+1}</b><span>Question</span></div><div><b>${qg.streak}</b><span>Streak</span></div><div><b>${qg.bestStreak}</b><span>Best</span></div></div>
+          <div class="progress quiz-progress"><span style="width:${progress}%"></span></div>
+          <p class="mini">Progress: ${qg.index+1} of ${questions.length}. Difficulty path: 🟢 Easy 1–30 → 🟡 Intermediate 31–70 → 🔴 Advanced 71–100.</p>
+          <div class="quiz-course-grid small">${resultCards}</div>
+        </aside>
+        <section class="quiz-game-card card">
+          <div class="quiz-topline"><span class="pill blue">${qg.course}</span><span class="pill gray">Question ${current.number} / 100</span><span class="pill success">${difficultyEmoji} ${currentDifficulty}</span><span class="pill gray">${escapeHtml(current.topic || 'Specialist practice')}</span></div>
+          <h3>${escapeHtml(current.q)}</h3>
+          <div class="quiz-options">
+            ${current.options.map((opt,i)=>{
+              const selected=qg.selected===opt;
+              const isCorrect=qg.feedback && opt===current.answer;
+              const isWrong=qg.feedback && selected && opt!==current.answer;
+              return `<button class="quiz-option ${selected?'selected':''} ${isCorrect?'correct':''} ${isWrong?'wrong':''}" data-quiz-option="${i}" ${qg.feedback?'disabled':''}><span>${String.fromCharCode(65+i)}</span><strong>${escapeHtml(opt)}</strong></button>`;
+            }).join('')}
+          </div>
+          ${qg.feedback ? `<div class="quiz-alert ${qg.feedback.ok?'correct':'wrong'}"><strong>${qg.feedback.ok?'🎉 Excellent! Correct answer':'😟 Not correct yet'}</strong><p>${escapeHtml(qg.feedback.message)}</p><p><b>Correct answer:</b> ${escapeHtml(current.answer)}</p><p><b>Guide:</b> ${escapeHtml(current.explanation)}</p></div>` : `<div class="quiz-alert waiting"><strong>Choose an answer</strong><p>The system will immediately show whether your answer is correct or wrong, encourage you, and provide the correct answer with guidance.</p></div>`}
+          <div class="quiz-actions">
+            <button class="btn outline" id="showQuizAnswer">Show answer</button>
+            <button class="btn" id="nextQuizQuestion" ${qg.feedback?'':'disabled'}>${qg.index===questions.length-1?'Finish Course':'Next Question'}</button>
+          </div>
+        </section>
+      </div>`;
+  }
+
+  function resetQuizCourse(course){
+    state.quizGame = {course, index:0, score:0, answered:0, streak:0, bestStreak:0, selected:null, feedback:null, finished:false, results: state.quizGame?.results || {}};
+    saveState();
+  }
+  function bindQuiz(){
+    const qg = ensureQuizGame();
+    const questions = getCourseQuestions(qg.course);
+    const current = questions[qg.index] || questions[0];
+    $('quizCourseSelect')?.addEventListener('change',()=>{ resetQuizCourse($('quizCourseSelect').value); render(); showToast('Course selected. Quiz restarted.'); });
+    $('restartQuiz')?.addEventListener('click',()=>{ const course=$('quizCourseSelect')?.value || qg.course; resetQuizCourse(course); render(); showToast('Quiz restarted.'); });
+    document.querySelectorAll('[data-quiz-option]').forEach(btn=>btn.addEventListener('click',()=>{
+      if(state.quizGame.feedback) return;
+      const opt = current.options[Number(btn.dataset.quizOption)];
+      const ok = opt === current.answer;
+      state.quizGame.selected = opt;
+      state.quizGame.answered += 1;
+      if(ok){ state.quizGame.score += 1; state.quizGame.streak += 1; state.quizGame.bestStreak = Math.max(state.quizGame.bestStreak, state.quizGame.streak); }
+      else { state.quizGame.streak = 0; }
+      state.quizGame.feedback = {ok, message: ok ? 'Great job! Your answer is correct. Keep going and build your streak.' : 'Do not worry. Review the correct answer carefully, then continue with more attention.'};
+      state.quizGame.results[state.quizGame.course] = {score:state.quizGame.score, answered:state.quizGame.answered, percent:quizPercent(state.quizGame), bestStreak:state.quizGame.bestStreak};
+      saveState();
+      if(navigator.vibrate) { try{ navigator.vibrate(ok ? [70] : [130,60,130]); }catch(e){} }
+      render();
+      showToast(ok ? '🎉 Excellent! Correct answer.' : '😟 Not correct yet. Check the guide and try the next question carefully.');
+    }));
+    $('showQuizAnswer')?.addEventListener('click',()=>{
+      if(state.quizGame.feedback) return;
+      state.quizGame.selected = null;
+      state.quizGame.answered += 1;
+      state.quizGame.streak = 0;
+      state.quizGame.feedback = {ok:false, message:'Answer revealed for learning. Review it carefully before continuing; this question is counted as incorrect.'};
+      state.quizGame.results[state.quizGame.course] = {score:state.quizGame.score, answered:state.quizGame.answered, percent:quizPercent(state.quizGame), bestStreak:state.quizGame.bestStreak};
+      saveState(); render(); showToast('⚠️ Answer revealed. Review the guide.');
+    });
+    $('nextQuizQuestion')?.addEventListener('click',()=>{
+      if(!state.quizGame.feedback) return showToast('Please answer first.');
+      if(state.quizGame.index >= questions.length-1){
+        state.quizGame.finished = true;
+        state.quizGame.results[state.quizGame.course] = {score:state.quizGame.score, answered:state.quizGame.answered, percent:quizPercent(state.quizGame), bestStreak:state.quizGame.bestStreak};
+      } else {
+        state.quizGame.index += 1;
+        state.quizGame.selected = null;
+        state.quizGame.feedback = null;
+      }
+      saveState(); render();
+    });
+  }
+
+
+  function webDirectory(){
+    const items = [
+      {cat:'Official Digital Health & Health IT Organizations', sub:'Global and government organizations', name:'World Health Organization - Digital Health', type:'Official global health resource', note:'Digital health topics, global strategy, guidance and publications.', url:'https://www.who.int/health-topics/digital-health', icon:'🌍'},
+      {cat:'Official Digital Health & Health IT Organizations', sub:'Global and government organizations', name:'WHO Global Observatory for eHealth', type:'Official WHO resource', note:'Global eHealth and digital health knowledge resources.', url:'https://www.who.int/observatories/global-observatory-for-ehealth', icon:'🌐'},
+      {cat:'Official Digital Health & Health IT Organizations', sub:'US health IT and policy', name:'ONC HealthIT.gov', type:'Official U.S. health IT resource', note:'Health IT certification, interoperability, data and implementation resources.', url:'https://www.healthit.gov/', icon:'🏛️'},
+      {cat:'Official Digital Health & Health IT Organizations', sub:'US health IT and policy', name:'ONC Health IT Playbook', type:'Implementation guide', note:'Practical guidance for selecting, using and optimizing health IT.', url:'https://www.healthit.gov/playbook/', icon:'📘'},
+      {cat:'Official Digital Health & Health IT Organizations', sub:'Public health agencies', name:'CDC', type:'Official public health agency', note:'Public health guidance, datasets, ICD resources, surveillance and disease information.', url:'https://www.cdc.gov/', icon:'🦠'},
+      {cat:'Official Digital Health & Health IT Organizations', sub:'Privacy, safety and regulation', name:'HHS HIPAA for Professionals', type:'Official privacy and security resource', note:'HIPAA privacy, security, breach notification and compliance guidance.', url:'https://www.hhs.gov/hipaa/for-professionals/index.html', icon:'🔐'},
+      {cat:'Official Digital Health & Health IT Organizations', sub:'Privacy, safety and regulation', name:'FDA Digital Health Center of Excellence', type:'Official regulatory resource', note:'Digital health, medical device software, SaMD, AI/ML and regulatory resources.', url:'https://www.fda.gov/medical-devices/digital-health-center-excellence', icon:'⚖️'},
+      {cat:'Official Digital Health & Health IT Organizations', sub:'Professional associations', name:'HIMSS', type:'Health IT professional society', note:'Healthcare information and management systems, digital maturity, conferences and education.', url:'https://www.himss.org/', icon:'🏥'},
+      {cat:'Official Digital Health & Health IT Organizations', sub:'Professional associations', name:'AHIMA', type:'Health information management association', note:'HIM, coding, documentation, privacy, data quality and professional resources.', url:'https://www.ahima.org/', icon:'🗂️'},
+      {cat:'Official Digital Health & Health IT Organizations', sub:'Professional associations', name:'AMIA', type:'Biomedical and health informatics association', note:'Informatics research, education, policy and conferences.', url:'https://amia.org/', icon:'🧠'},
+      {cat:'Official Digital Health & Health IT Organizations', sub:'Professional associations', name:'IFHIMA', type:'International HIM association', note:'International federation for health information management practice and education.', url:'https://ifhima.org/', icon:'🌍'},
+
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Global EHR / HIS vendors', name:'Epic', type:'EHR and healthcare software company', note:'Major EHR, patient portal, interoperability and health system software vendor.', url:'https://www.epic.com/', icon:'🏥'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Global EHR / HIS vendors', name:'Oracle Health', type:'EHR and healthcare technology company', note:'Oracle Health, formerly Cerner, provides EHR and healthcare data solutions.', url:'https://www.oracle.com/health/', icon:'🧾'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Global EHR / HIS vendors', name:'MEDITECH Expanse', type:'EHR platform', note:'Enterprise EHR platform used by hospitals and healthcare organizations.', url:'https://ehr.meditech.com/', icon:'💻'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Global EHR / HIS vendors', name:'InterSystems TrakCare', type:'Unified healthcare information system', note:'Clinical, administrative and health information system platform used internationally.', url:'https://www.intersystems.com/products/trakcare/', icon:'🔗'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Global EHR / HIS vendors', name:'Dedalus', type:'Healthcare and diagnostic software company', note:'Clinical, hospital, diagnostic and population health software solutions.', url:'https://www.dedalus.com/', icon:'🏨'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Global EHR / HIS vendors', name:'Altera Digital Health', type:'Healthcare IT company', note:'EHR, clinical and hospital IT solutions.', url:'https://www.alterahealth.com/', icon:'🖥️'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Open-source and low-resource HIS', name:'OpenMRS', type:'Open-source electronic medical record platform', note:'Open-source EMR platform widely used for global health implementations.', url:'https://openmrs.org/', icon:'🟢'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Open-source and low-resource HIS', name:'OpenEMR', type:'Open-source EHR and practice management', note:'Open-source EHR, practice management and billing platform.', url:'https://www.open-emr.org/', icon:'🟩'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Open-source and low-resource HIS', name:'Bahmni', type:'Open-source hospital system', note:'Open-source hospital system built on OpenMRS, OpenELIS, Odoo and other components.', url:'https://www.bahmni.org/', icon:'🏥'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Open-source and low-resource HIS', name:'DHIS2', type:'Health information management platform', note:'Open-source platform for aggregate health data, reporting, surveillance and program monitoring.', url:'https://dhis2.org/', icon:'📊'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Open-source and low-resource HIS', name:'GNU Health', type:'Free health and hospital information system', note:'Free software for hospital management, electronic health records and public health.', url:'https://www.gnuhealth.org/', icon:'🆓'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Open-source and low-resource HIS', name:'OpenELIS Global', type:'Open-source laboratory information system', note:'Open-source LIS for laboratory workflow and public health laboratories.', url:'https://openelis-global.org/', icon:'🧪'},
+      {cat:'HIS, EHR & Hospital System Companies', sub:'Open-source and low-resource HIS', name:'SENAITE', type:'Open-source LIMS/LIS', note:'Open-source laboratory information management system.', url:'https://www.senaite.com/', icon:'🔬'},
+
+      {cat:'Research Databases & Scientific Article Sources', sub:'Biomedical article search', name:'PubMed', type:'Free biomedical literature search', note:'Search MEDLINE and biomedical citations; links to abstracts and full text when available.', url:'https://pubmed.ncbi.nlm.nih.gov/', icon:'🔎'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Biomedical article search', name:'PubMed Central', type:'Free full-text archive', note:'Free full-text archive of biomedical and life sciences journal literature.', url:'https://pmc.ncbi.nlm.nih.gov/', icon:'📄'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Biomedical article search', name:'Europe PMC', type:'Life sciences article search', note:'Search life sciences publications, preprints and grants with full-text links where available.', url:'https://europepmc.org/', icon:'🇪🇺'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Biomedical article search', name:'NLM Catalog', type:'NLM journal and book catalog', note:'Find journal records, NLM holdings and biomedical publication metadata.', url:'https://www.ncbi.nlm.nih.gov/nlmcatalog/', icon:'📚'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Systematic reviews and evidence', name:'Cochrane Evidence', type:'Evidence summaries and review search', note:'Search Cochrane evidence summaries and systematic review information.', url:'https://www.cochrane.org/evidence', icon:'✅'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Systematic reviews and evidence', name:'Epistemonikos', type:'Evidence database', note:'Database of systematic reviews and evidence-based health care resources.', url:'https://www.epistemonikos.org/', icon:'🧩'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Clinical trials and protocols', name:'ClinicalTrials.gov', type:'Clinical study registry', note:'Registry and results database of clinical studies.', url:'https://clinicaltrials.gov/', icon:'🧪'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Clinical trials and protocols', name:'WHO ICTRP', type:'International clinical trials registry portal', note:'Global clinical trial search portal maintained by WHO.', url:'https://trialsearch.who.int/', icon:'🌍'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Open-access article discovery', name:'DOAJ', type:'Directory of open access journals', note:'Search peer-reviewed open-access journals and articles.', url:'https://doaj.org/', icon:'🔓'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Open-access article discovery', name:'CORE', type:'Open-access research aggregator', note:'Search open-access research outputs from repositories and journals.', url:'https://core.ac.uk/', icon:'📚'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Open-access article discovery', name:'Semantic Scholar', type:'AI-assisted research search', note:'Find scientific papers, citation contexts and related work.', url:'https://www.semanticscholar.org/', icon:'🤖'},
+      {cat:'Research Databases & Scientific Article Sources', sub:'Open-access article discovery', name:'Google Scholar', type:'Scholarly search engine', note:'Broad search for scholarly articles, books, theses and citations.', url:'https://scholar.google.com/', icon:'🎓'},
+
+      {cat:'Health Informatics Standards & Terminologies', sub:'Interoperability standards', name:'HL7 FHIR', type:'Health data exchange standard', note:'Official FHIR specification and resources for interoperable health information exchange.', url:'https://hl7.org/fhir/', icon:'🔥'},
+      {cat:'Health Informatics Standards & Terminologies', sub:'Interoperability standards', name:'HL7 International', type:'Standards development organization', note:'Health Level Seven standards, implementation guides and communities.', url:'https://www.hl7.org/', icon:'🔗'},
+      {cat:'Health Informatics Standards & Terminologies', sub:'Interoperability standards', name:'openEHR', type:'Open health record specification', note:'Open specifications for clinical models, archetypes and electronic health records.', url:'https://www.openehr.org/', icon:'🧬'},
+      {cat:'Health Informatics Standards & Terminologies', sub:'Terminology and coding systems', name:'ICD-11 Browser', type:'WHO classification browser', note:'Official browser for ICD-11 mortality and morbidity statistics.', url:'https://icd.who.int/browse/latest-release/mms/en', icon:'🏷️'},
+      {cat:'Health Informatics Standards & Terminologies', sub:'Terminology and coding systems', name:'CDC ICD-10-CM Browser', type:'Diagnosis coding browser', note:'Official U.S. ICD-10-CM browsing tool.', url:'https://icd10cmtool.cdc.gov/', icon:'🧾'},
+      {cat:'Health Informatics Standards & Terminologies', sub:'Terminology and coding systems', name:'SNOMED International', type:'Clinical terminology', note:'International clinical terminology resources and browser links.', url:'https://www.snomed.org/', icon:'🧠'},
+      {cat:'Health Informatics Standards & Terminologies', sub:'Terminology and coding systems', name:'LOINC', type:'Lab and observation identifiers', note:'Logical Observation Identifiers Names and Codes for labs, measurements and documents.', url:'https://loinc.org/', icon:'🧪'},
+      {cat:'Health Informatics Standards & Terminologies', sub:'Terminology and coding systems', name:'RxNorm', type:'Clinical drug terminology', note:'NLM normalized names and identifiers for clinical drugs.', url:'https://www.nlm.nih.gov/research/umls/rxnorm/', icon:'💊'},
+      {cat:'Health Informatics Standards & Terminologies', sub:'Terminology and coding systems', name:'UMLS', type:'Unified Medical Language System', note:'NLM metathesaurus and terminology resources for biomedical informatics.', url:'https://www.nlm.nih.gov/research/umls/', icon:'📚'},
+      {cat:'Health Informatics Standards & Terminologies', sub:'Imaging and data standards', name:'DICOM Standard', type:'Medical imaging standard', note:'Official standard for medical imaging data and communication.', url:'https://www.dicomstandard.org/current', icon:'🩻'},
+      {cat:'Health Informatics Standards & Terminologies', sub:'Research data models', name:'OHDSI OMOP Common Data Model', type:'Observational health data model', note:'Common data model and community tools for observational health research.', url:'https://ohdsi.github.io/CommonDataModel/', icon:'🧱'},
+
+      {cat:'Scientific Journals & Publishers', sub:'Digital health and informatics journals', name:'Journal of Medical Internet Research', type:'Digital health journal family', note:'Peer-reviewed digital health, eHealth and internet medicine research.', url:'https://www.jmir.org/', icon:'📰'},
+      {cat:'Scientific Journals & Publishers', sub:'Digital health and informatics journals', name:'JAMIA', type:'Biomedical informatics journal', note:'Journal of the American Medical Informatics Association.', url:'https://academic.oup.com/jamia', icon:'📘'},
+      {cat:'Scientific Journals & Publishers', sub:'Digital health and informatics journals', name:'BMC Medical Informatics and Decision Making', type:'Open-access journal', note:'Medical informatics, decision support and healthcare data science articles.', url:'https://bmcmedinformdecismak.biomedcentral.com/', icon:'🔓'},
+      {cat:'Scientific Journals & Publishers', sub:'Digital health and informatics journals', name:'npj Digital Medicine', type:'Digital medicine journal', note:'Research in digital medicine, AI, mobile health and connected health.', url:'https://www.nature.com/npjdigitalmed/', icon:'📱'},
+      {cat:'Scientific Journals & Publishers', sub:'Digital health and informatics journals', name:'PLOS Digital Health', type:'Open-access digital health journal', note:'Digital health research, AI, data science and global digital health.', url:'https://journals.plos.org/digitalhealth/', icon:'🌐'},
+      {cat:'Scientific Journals & Publishers', sub:'Digital health and informatics journals', name:'Frontiers in Digital Health', type:'Open-access journal', note:'Digital health, health informatics, implementation and technology research.', url:'https://www.frontiersin.org/journals/digital-health', icon:'🚀'},
+      {cat:'Scientific Journals & Publishers', sub:'Digital health and informatics journals', name:'The Lancet Digital Health', type:'Digital health journal', note:'High-impact digital health research and commentaries; access varies by article.', url:'https://www.thelancet.com/journals/landig/home', icon:'🧬'},
+      {cat:'Scientific Journals & Publishers', sub:'Medical records, public health and research', name:'BMJ Health & Care Informatics', type:'Health informatics journal', note:'Health informatics, clinical systems and digital transformation research.', url:'https://informatics.bmj.com/', icon:'🩺'},
+      {cat:'Scientific Journals & Publishers', sub:'Medical records, public health and research', name:'International Journal of Medical Informatics', type:'Medical informatics journal', note:'Clinical information systems, EHR, patient safety and informatics research; access varies by article.', url:'https://www.sciencedirect.com/journal/international-journal-of-medical-informatics', icon:'📗'},
+      {cat:'Scientific Journals & Publishers', sub:'Medical records, public health and research', name:'Journal of Biomedical Informatics', type:'Biomedical informatics journal', note:'Biomedical data science, informatics methods and clinical applications; access varies by article.', url:'https://www.sciencedirect.com/journal/journal-of-biomedical-informatics', icon:'🔬'},
+
+      {cat:'Health Data, Research Datasets & Analytics', sub:'Clinical and physiological datasets', name:'PhysioNet', type:'Open research data repository', note:'Physiologic signals, clinical datasets and software for biomedical research.', url:'https://physionet.org/', icon:'📈'},
+      {cat:'Health Data, Research Datasets & Analytics', sub:'Clinical and physiological datasets', name:'MIMIC-IV on PhysioNet', type:'Critical care database', note:'Deidentified critical care database for research and education with credentialed access.', url:'https://physionet.org/content/mimiciv/', icon:'🏥'},
+      {cat:'Health Data, Research Datasets & Analytics', sub:'Clinical and physiological datasets', name:'Synthea', type:'Synthetic patient generator', note:'Open-source synthetic patient records generator for health IT demos and research.', url:'https://synthetichealth.github.io/synthea/', icon:'🧑‍💻'},
+      {cat:'Health Data, Research Datasets & Analytics', sub:'Public health data portals', name:'WHO Global Health Observatory', type:'Global health data portal', note:'Global health indicator data, dashboards and country statistics.', url:'https://www.who.int/data/gho', icon:'🌍'},
+      {cat:'Health Data, Research Datasets & Analytics', sub:'Public health data portals', name:'HealthData.gov', type:'U.S. health data portal', note:'Datasets from U.S. health agencies and health-related open data.', url:'https://healthdata.gov/', icon:'📊'},
+      {cat:'Health Data, Research Datasets & Analytics', sub:'Public health data portals', name:'CDC Data & Statistics', type:'Public health data', note:'CDC data tools, surveillance systems, statistics and datasets.', url:'https://www.cdc.gov/datastatistics/index.html', icon:'📉'},
+      {cat:'Health Data, Research Datasets & Analytics', sub:'Public health data portals', name:'Global Health Data Exchange', type:'IHME data catalog', note:'Catalog for global burden of disease and health-related datasets.', url:'https://ghdx.healthdata.org/', icon:'🌐'},
+      {cat:'Health Data, Research Datasets & Analytics', sub:'Drug and device data', name:'openFDA', type:'FDA open data APIs', note:'FDA datasets and APIs for drugs, devices, foods and adverse events.', url:'https://open.fda.gov/', icon:'💊'},
+      {cat:'Health Data, Research Datasets & Analytics', sub:'Drug and device data', name:'DrugBank Online', type:'Drug knowledge database', note:'Drug, target, interaction and pharmacology information; access varies by use case.', url:'https://go.drugbank.com/', icon:'💊'},
+
+      {cat:'Evidence-Based Guidelines & Clinical References', sub:'Guidelines and recommendations', name:'NICE Guidance', type:'Clinical and public health guidance', note:'UK evidence-based guidelines, technology appraisals and standards.', url:'https://www.nice.org.uk/guidance', icon:'📋'},
+      {cat:'Evidence-Based Guidelines & Clinical References', sub:'Guidelines and recommendations', name:'WHO Publications', type:'Official WHO publications', note:'Guidelines, reports, manuals and policy documents.', url:'https://www.who.int/publications', icon:'📚'},
+      {cat:'Evidence-Based Guidelines & Clinical References', sub:'Guidelines and recommendations', name:'CDC Guidelines and Recommendations', type:'Official public health guidance', note:'Clinical, infection control, public health and prevention guidance.', url:'https://www.cdc.gov/guidelines/', icon:'🦠'},
+      {cat:'Evidence-Based Guidelines & Clinical References', sub:'Guidelines and recommendations', name:'AHRQ', type:'Healthcare quality and evidence resources', note:'Healthcare research, quality, patient safety and evidence-based practice tools.', url:'https://www.ahrq.gov/', icon:'✅'},
+      {cat:'Evidence-Based Guidelines & Clinical References', sub:'Clinical reference portals', name:'Merck Manual Professional', type:'Free professional clinical reference', note:'Clinical topics, drug information, procedures and medical education resources.', url:'https://www.merckmanuals.com/professional', icon:'🩺'},
+      {cat:'Evidence-Based Guidelines & Clinical References', sub:'Clinical reference portals', name:'NCBI Bookshelf', type:'Free online biomedical books', note:'Free online biomedical books, clinical references and reports.', url:'https://www.ncbi.nlm.nih.gov/books/', icon:'📖'}
+    ];
+    const categories=[...new Set(items.map(i=>i.cat))];
+    const selectedCat=state.directoryCat || '';
+    const subs=[...new Set(items.filter(i=>i.cat===selectedCat).map(i=>i.sub))];
+    const selectedSub=state.directorySub || '';
+    const results=(selectedCat && selectedSub) ? items.filter(i=>i.cat===selectedCat && i.sub===selectedSub) : [];
+    return html`
+      <div class="section-title" style="margin-top:0"><div><h3>Websites & Research Directory</h3><p>Choose a category and subcategory to display related HIS companies, official websites, research databases, journals, standards and scientific article sources.</p></div><span class="pill success">Curated links</span></div>
+      <div class="card resource-selector-card">
+        <div class="grid cols-2">
+          <div class="field"><label>1. Select main category</label><select id="directoryCat"><option value="">Select a category</option>${categories.map(c=>`<option ${c===selectedCat?'selected':''}>${c}</option>`).join('')}</select></div>
+          <div class="field"><label>2. Select subcategory</label><select id="directorySub" ${selectedCat?'':'disabled'}><option value="">Select a subcategory</option>${subs.map(c=>`<option ${c===selectedSub?'selected':''}>${c}</option>`).join('')}</select></div>
+        </div>
+        <p class="source-note">No links are shown until a category and subcategory are selected. This keeps the page clean and helps students find exactly the type of source they need.</p>
+      </div>
+      ${results.length?`<div class="resource-grid" style="margin-top:18px">${results.map(r=>`
+        <article class="resource-card website-card">
+          <div class="resource-icon">${r.icon}</div>
+          <div class="resource-content"><span class="pill light">${r.type}</span><h4>${r.name}</h4><p>${r.note}</p><a class="btn outline" href="${r.url}" target="_blank" rel="noopener">Open Website</a></div>
+        </article>`).join('')}</div>`:`<div class="empty-state card"><h3>Select a category to view links</h3><p>For example: HIS/EHR companies, PubMed and research databases, scientific journals, interoperability standards, digital health organizations or health datasets.</p></div>`}
+    `;
+  }
+
+  function reports(){
+    const user=getActiveUser() || {name:'Student', role:'Learner'};
+    const quizResults = state.quizGame?.results || {};
+    const quizCompleted = Object.keys(quizResults).length;
+    const quizBest = Object.values(quizResults).reduce((m,r)=>Math.max(m, r?.score || 0), 0);
+    const codingScore = state.coding?.result?.score || 0;
+    const codingStatus = state.coding?.result?.status || 'Not completed';
+    const termCategory = state.termCategory || 'Not selected yet';
+    const libraryActivity = state.librarySearched ? `${state.libraryField || ''} / ${state.librarySpecialty || ''}` : 'No library search recorded yet';
+    const completedActivities = [codingScore>0 ? 'Medical Coding Lab' : null, quizCompleted>0 ? 'Mini Quiz Game' : null, state.termCategory ? 'Terminology Dictionary' : null, state.librarySearched ? 'Medical Library' : null].filter(Boolean);
+    const certLevel = codingScore>=85 || quizBest>=80 ? 'Certificate of Academic Practice Completion' : 'Certificate of Academic Participation';
+    const report = `DigiHealth Lab - Portfolio & Certificate Report
+
+Learner: ${user.name}
+Role: ${user.role}
+
+Recorded activity in this browser:
+- Completed activity areas: ${completedActivities.join(', ') || 'No completed activity recorded yet'}
+- Terminology category studied: ${termCategory}
+- Coding lab: ${codingScore ? codingScore + '% - ' + codingStatus : 'Not completed yet'}
+- Mini Quiz courses attempted: ${quizCompleted}
+- Best quiz score: ${quizBest}%
+- Medical Library activity: ${libraryActivity}
+
+Academic note: This report only reflects activities actually recorded in this prototype browser session.`;
+    return html`
+      <div class="grid cols-4"><div class="card metric"><div class="metric-icon">🧾</div><div><h4>${codingScore ? codingScore+'%' : '—'}</h4><p>Coding Lab result</p></div></div><div class="card metric"><div class="metric-icon">🎮</div><div><h4>${quizCompleted}</h4><p>Quiz courses attempted</p></div></div><div class="card metric"><div class="metric-icon">🔎</div><div><h4>${state.termCategory?'1':'0'}</h4><p>Dictionary category studied</p></div></div><div class="card metric"><div class="metric-icon">📚</div><div><h4>${state.librarySearched?'1':'0'}</h4><p>Library search recorded</p></div></div></div>
+      <div class="grid cols-2" style="margin-top:18px"><div class="card"><h3>Learner Activity Summary</h3><div class="table-wrap"><table class="table"><thead><tr><th>Area</th><th>Status</th><th>Recorded evidence</th></tr></thead><tbody><tr><td>Medical Coding Lab</td><td>${statusPill(codingScore?'Completed / attempted':'Not completed')}</td><td>${codingScore ? `${codingScore}% • ${codingStatus}` : 'No checked coding case yet'}</td></tr><tr><td>Mini Quiz Game</td><td>${statusPill(quizCompleted?'Attempted':'Not attempted')}</td><td>${quizCompleted} course(s), best score ${quizBest}%</td></tr><tr><td>Terminology Dictionary</td><td>${statusPill(state.termCategory?'Used':'Not used')}</td><td>${escapeHtml(termCategory)}</td></tr><tr><td>Medical Library</td><td>${statusPill(state.librarySearched?'Used':'Not used')}</td><td>${escapeHtml(libraryActivity)}</td></tr><tr><td>Official Checklists</td><td>${statusPill(state.checklistSub && state.checklistSub!=='Select checklist topic'?'Used':'Not used')}</td><td>${escapeHtml(state.checklistSub||'Not selected yet')}</td></tr><tr><td>Hospital Statistics Indicators</td><td>${statusPill(state.statsArea && state.statsArea!=='Select statistics category'?'Used':'Not used')}</td><td>${escapeHtml(state.statsArea||'Not selected yet')}</td></tr></tbody></table></div></div><div class="card certificate-preview"><h3>Downloadable Academic Certificate</h3><div class="certificate-card"><span class="pill success">DigiHealth Lab Academy</span><h2>${certLevel}</h2><p>This certificate is awarded to</p><h3>${escapeHtml(user.name)}</h3><p>for recorded academic practice in terminology, coding practice, quiz activities, medical library use, official checklists and hospital statistics activities within DigiHealth Lab.</p><p><strong>Designer / Academic Platform:</strong> Motahhareh Khorshidzadeh</p></div><button class="btn" id="downloadCertificate">Download Certificate</button></div></div>
+      <div class="card" style="margin-top:18px"><h3>Portfolio Report</h3><pre id="reportText" class="report-box">${escapeHtml(report)}</pre><div class="hero-actions"><button class="btn" id="copyReport">Copy Report</button><button class="btn outline" id="printReport">Print / Save PDF</button></div></div>
+    `;
+  }
+
+  function workflowCompletionPercent(){ return Math.round((doneCount()/steps.length)*100); }
+
+  function timelineHtml(clickable=false){
+    return `<div class="timeline long-timeline">${steps.map((s,i)=>`<div class="step ${state.completedSteps.includes(s.id)?'done':''} ${state.activeStep===i?'active':''}" ${clickable?`data-step="${i}"`:''}><div class="dot">${state.completedSteps.includes(s.id)?'✓':i+1}</div><small>${s.icon}</small><strong>${s.id}</strong><small>${s.desc}</small></div>`).join('')}</div>`;
+  }
+
+  function stepPanel(){
+    ensureHisState();
+    const step = steps[state.activeStep] || steps[0];
+    const common = `
+      <div class="process-step-panel">
+        <div class="section-title"><div><h3>${step.icon} ${step.id}</h3><p>${step.desc}</p></div><button class="btn" id="completeStep">Mark Step Complete</button></div>
+        <div class="step-knowledge-grid">
+          <div><strong>People involved</strong>${listMini(step.roles)}</div>
+          <div><strong>HIS / EMR modules</strong>${listMini(step.systems)}</div>
+          <div><strong>Required documents</strong>${listMini(step.documents)}</div>
+          <div><strong>Practice task</strong><p>${step.practice}</p><strong class="risk-label">Documentation risk</strong><p>${step.risk}</p></div>
+        </div>`;
+    let body='';
+    if(step.id==='Patient Arrival & Registration') body = registrationForm();
+    else if(step.id==='Triage / Initial Assessment') body = triagePanel();
+    else if(step.id==='Insurance & Eligibility') body = simpleStageForm('insurance','Insurance verification','Insurance status','Coverage verified','Guarantee letter / remarks','Eligibility confirmed for simulated admission.');
+    else if(step.id==='Admission Decision & Bed Management') body = admissionForm();
+    else if(step.id==='Ward Admission') body = wardAdmissionPanel();
+    else if(step.id==='Clinical Assessment & EMR Documentation') body = documentationForm();
+    else if(step.id==='CPOE Orders & Care Plan') body = ordersTable();
+    else if(step.id==='Laboratory Workflow') body = resultsPanel('lab');
+    else if(step.id==='Radiology & Imaging Workflow') body = resultsPanel('radiology');
+    else if(step.id==='Pharmacy & Medication Safety') body = pharmacyPanel();
+    else if(step.id==='Specialist Consultation') body = consultationPanel();
+    else if(step.id==='Surgery / Procedure / Anesthesia') body = surgeryPanel();
+    else if(step.id==='Daily Nursing Care & Progress Notes') body = dailyCarePanel();
+    else if(step.id==='Discharge Planning') body = dischargePlanningPanel();
+    else if(step.id==='Clinical Outcome: Discharge / Transfer / Death') body = clinicalOutcomePanel();
+    else if(step.id==='Medical Records Review') body = `<p>This workflow step is currently reserved for a future Medical Records Review module. For now, use the Medical Library and Coding Lab sections for academic reference and coding practice.</p>${recordsReviewSnapshot()}`;
+    else if(step.id==='Medical Coding & Mortality Coding') body = codingOutcomePanel();
+    else if(step.id==='Billing & Insurance Finalization') body = billingPanel();
+    else body = `<p>Generate archive, statistics and portfolio evidence from the Portfolio & Certificate module.</p><button class="btn outline" data-go="reports">Open Reports</button>`;
+    return common + `<div class="stage-practice-card">${body}</div></div>`;
+  }
+
+  function listMini(items){ return `<ul class="mini-list">${(items||[]).map(x=>`<li>${x}</li>`).join('')}</ul>`; }
+
+  function patientRows(){
+    ensureHisState();
+    const p=state.patient;
+    const rows=['patientId','name','dob','gender','allergy','category','status','ward','bed'];
+    return rows.map(k=>`<div class="patient-row"><span>${label(k)}</span><strong>${escapeHtml(p[k]||'-')}</strong></div>`).join('')+
+      `<div class="patient-row"><span>Final outcome path</span><strong>${escapeHtml(state.his.outcome||'Discharge')}</strong></div>`;
+  }
+  function label(k){return ({patientId:'Patient ID',name:'Name',dob:'Date of birth',gender:'Gender',allergy:'Allergy',category:'Category',status:'Status',ward:'Ward',bed:'Bed'})[k]||k}
+
+  function registrationForm(){
+    const p=state.patient;
+    return `<div class="form-grid">
+      <div class="field"><label>Patient ID / MRN</label><input id="p_patientId" value="${escapeHtml(p.patientId||'')}"></div>
+      <div class="field"><label>Full name</label><input id="p_name" value="${escapeHtml(p.name||'')}"></div>
+      <div class="field"><label>Date of birth</label><input id="p_dob" type="date" value="${escapeHtml(p.dob||'')}"></div>
+      <div class="field"><label>Gender</label><select id="p_gender"><option ${p.gender==='Female'?'selected':''}>Female</option><option ${p.gender==='Male'?'selected':''}>Male</option><option ${p.gender==='Other / Training'?'selected':''}>Other / Training</option></select></div>
+      <div class="field"><label>Phone</label><input id="p_phone" value="${escapeHtml(p.phone||'')}"></div>
+      <div class="field"><label>Insurance / category</label><input id="p_insurance" value="${escapeHtml(p.insurance||'')}"></div>
+      <div class="field full"><label>Address</label><input id="p_address" value="${escapeHtml(p.address||'')}"></div>
+      <div class="field full"><label>Allergy alert</label><input id="p_allergy" value="${escapeHtml(p.allergy||'')}"></div>
+    </div><button class="btn outline" id="savePatient" style="margin-top:12px">Save Registration</button>
+    <div class="practice-alert"><strong>Student check:</strong> Confirm identifier, duplicate risk, emergency contact and allergy status before moving to triage or admission.</div>`;
+  }
+
+  function triagePanel(){
+    const t=ensureHisState().triage;
+    return `<div class="form-grid">
+      <div class="field"><label>Triage level</label><select id="triageLevel"><option ${t.level==='Critical'?'selected':''}>Critical</option><option ${t.level==='Urgent'?'selected':''}>Urgent</option><option ${t.level==='Semi-urgent'?'selected':''}>Semi-urgent</option><option ${t.level==='Non-urgent'?'selected':''}>Non-urgent</option></select></div>
+      <div class="field"><label>Priority note</label><input id="triagePriority" value="${escapeHtml(t.priority||'')}"></div>
+      <div class="field full"><label>Vital signs</label><textarea id="triageVitals">${escapeHtml(t.vitals||'')}</textarea></div>
+    </div><button class="btn outline" id="saveTriage" style="margin-top:12px">Save Triage</button>`;
+  }
+
+  function simpleStageForm(key,title,label1,value1,label2,value2){
+    const his=ensureHisState(); const data=his.stageNotes[key]||{};
+    return `<div class="form-grid"><div class="field"><label>${label1}</label><input id="${key}_a" value="${escapeHtml(data.a||value1)}"></div><div class="field full"><label>${label2}</label><textarea id="${key}_b">${escapeHtml(data.b||value2)}</textarea></div></div><button class="btn outline" data-save-his="${key}" style="margin-top:12px">Save ${title}</button>`;
+  }
+
+  function admissionForm(){
+    const p=state.patient;
+    return `<div class="form-grid">
+      <div class="field"><label>Patient category</label><select id="p_category"><option ${p.category==='Inpatient'?'selected':''}>Inpatient</option><option ${p.category==='Outpatient'?'selected':''}>Outpatient</option><option ${p.category==='Emergency'?'selected':''}>Emergency</option><option ${p.category==='Observation'?'selected':''}>Observation</option><option ${p.category==='Telehealth'?'selected':''}>Telehealth</option></select></div>
+      <div class="field"><label>Status</label><select id="p_status"><option ${p.status==='Registered'?'selected':''}>Registered</option><option ${p.status==='Waiting'?'selected':''}>Waiting</option><option ${p.status==='Admitted'?'selected':''}>Admitted</option><option ${p.status==='Transferred'?'selected':''}>Transferred</option><option ${p.status==='Discharged'?'selected':''}>Discharged</option><option ${p.status==='Expired'?'selected':''}>Expired</option></select></div>
+      <div class="field"><label>Ward</label><input id="p_ward" value="${escapeHtml(p.ward||'')}"></div>
+      <div class="field"><label>Bed</label><input id="p_bed" value="${escapeHtml(p.bed||'')}"></div>
+    </div><button class="btn outline" id="saveAdmission" style="margin-top:12px">Save Admission / Bed Management</button>`;
+  }
+
+  function wardAdmissionPanel(){
+    return simpleStageForm('ward','Ward Admission','Ward reception status','Patient received in ward and wristband verified','Nursing admission note','Initial assessment documented. Consent form status must be checked.');
+  }
+
+  function documentationForm(){
+    const n=state.notes;
+    return `<div class="form-grid"><div class="field full"><label>Chief complaint</label><textarea id="n_chief">${escapeHtml(n.chief||'')}</textarea></div><div class="field full"><label>History of present illness</label><textarea id="n_history">${escapeHtml(n.history||'')}</textarea></div><div class="field"><label>Diagnosis / problem list</label><textarea id="n_diagnosis">${escapeHtml(n.diagnosis||'')}</textarea></div><div class="field"><label>Treatment plan</label><textarea id="n_treatment">${escapeHtml(n.treatment||'')}</textarea></div></div><button class="btn outline" id="saveNotes" style="margin-top:12px">Save Clinical Documentation</button>`;
+  }
+
+  function ordersTable(){
+    return `<div class="table-wrap"><table class="table"><thead><tr><th>Order type</th><th>Item</th><th>Status</th><th>Training point</th></tr></thead><tbody>${state.orders.map(o=>`<tr><td>${o.type}</td><td>${o.item}</td><td>${statusPill(o.status)}</td><td>${o.result}</td></tr>`).join('')}</tbody></table></div><p class="mini">CPOE practice: every order should have correct patient, date/time, provider, indication, status and clear responsibility for follow-up.</p><button class="btn outline" data-save-his="orders" style="margin-top:12px">Confirm Orders Reviewed</button>`;
+  }
+
+  function resultsPanel(type='lab'){
+    const isRad=type==='radiology';
+    return `<div class="grid cols-3"><div class="card soft"><h4>${isRad?'Radiology request':'Lab request'}</h4><p>${isRad?'Chest X-ray requested and report status must be tracked.':'CBC and biochemistry requested; specimen and result status should be visible.'}</p></div><div class="card soft"><h4>Result validation</h4><p>${isRad?'Radiologist report pending/available must be attached to EMR.':'Abnormal results should be validated and communicated to physician.'}</p></div><div class="card soft"><h4>EMR attachment</h4><p>Student checks whether the result is available inside the patient record before discharge or coding.</p></div></div><button class="btn outline" data-save-his="${type}" style="margin-top:12px">Save ${isRad?'Radiology':'Laboratory'} Workflow</button>`;
+  }
+
+  function pharmacyPanel(){
+    return simpleStageForm('pharmacy','Pharmacy Safety','Medication safety status','Allergy alert reviewed before dispensing','Medication reconciliation note','Medication list compared with current orders and discharge plan.');
+  }
+  function consultationPanel(){
+    return simpleStageForm('consult','Specialist Consultation','Consult status','Consult requested and pending specialist note','Consultation note','Specialist recommendation documented in EMR and reviewed by treating physician.');
+  }
+  function surgeryPanel(){
+    return simpleStageForm('surgery','Surgery / Procedure','Procedure status','No procedure / procedure completed according to case','Required operation documents','Consent, pre-op checklist, operative report, anesthesia record and recovery note must be checked.');
+  }
+  function dailyCarePanel(){
+    return simpleStageForm('dailycare','Daily Care','Progress note status','Daily physician progress note entered','Nursing care note','Vital signs, medication administration, intake/output and education documented.');
+  }
+  function dischargePlanningPanel(){
+    const d=ensureHisState().dischargePlan;
+    return `<div class="form-grid"><div class="field"><label>Discharge plan type</label><select id="dischargeType"><option ${d.type==='Home discharge'?'selected':''}>Home discharge</option><option ${d.type==='Referral / Transfer'?'selected':''}>Referral / Transfer</option><option ${d.type==='Against medical advice'?'selected':''}>Against medical advice</option><option ${d.type==='Deceased patient pathway'?'selected':''}>Deceased patient pathway</option></select></div><div class="field"><label>Follow-up</label><input id="dischargeFollowup" value="${escapeHtml(d.followup||'')}"></div><div class="field full"><label>Patient / family education</label><textarea id="dischargeEducation">${escapeHtml(d.education||'')}</textarea></div></div><button class="btn outline" id="saveDischargePlan" style="margin-top:12px">Save Discharge Planning</button>`;
+  }
+
+  function clinicalOutcomePanel(){
+    const his=ensureHisState();
+    if(his.outcome==='Death') return deathPanel();
+    if(his.outcome==='Transfer') return transferPanel();
+    return dischargePanel();
+  }
+
+  function dischargePanel(){
+    return `<div class="field"><label>Discharge summary</label><textarea id="n_discharge" placeholder="Reason for admission, final diagnosis, hospital course, procedures, medication at discharge, condition, follow-up...">${escapeHtml(state.notes.discharge||'')}</textarea></div><button class="btn outline" id="saveDischarge" style="margin-top:12px">Save Discharge Summary</button><div class="practice-alert"><strong>Exit status:</strong> For a normal discharge, the HIS status should become Discharged and the discharge summary must be complete before final coding and archive.</div>`;
+  }
+
+  function transferPanel(){
+    const t=ensureHisState().transfer;
+    return `<div class="form-grid"><div class="field"><label>Transfer destination</label><input id="transferDestination" value="${escapeHtml(t.destination||'Referral hospital / specialist center')}"></div><div class="field"><label>Reason for transfer</label><input id="transferReason" value="${escapeHtml(t.reason||'Specialist care required')}"></div><div class="field full"><label>Referral / transfer note</label><textarea id="transferNote">${escapeHtml(t.referralNote||'Clinical summary, current treatment, investigations and reason for referral documented.')}</textarea></div></div><button class="btn outline" id="saveTransfer" style="margin-top:12px">Save Transfer Outcome</button><div class="practice-alert"><strong>Transfer path:</strong> Student must check referral letter, transfer summary, investigation copies and receiving facility details.</div>`;
+  }
+
+  function deathPanel(){
+    const d=ensureHisState().death;
+    return `<div class="mortality-path-card"><h4>Death / Expired Patient Workflow</h4><p>This pathway trains students to complete sensitive documentation after a fictional patient death. It includes pronouncement, death certificate sequence, body release and mortality coding readiness.</p></div><div class="form-grid"><div class="field"><label>Pronounced by</label><input id="deathPronouncedBy" value="${escapeHtml(d.pronouncedBy||'Physician')}"></div><div class="field"><label>Date/time pronounced</label><input id="deathPronouncedAt" value="${escapeHtml(d.pronouncedAt||'2026-07-08 14:30')}"></div><div class="field"><label>Immediate cause of death</label><input id="deathImmediate" value="${escapeHtml(d.immediate||'Acute respiratory failure')}"></div><div class="field"><label>Intermediate cause</label><input id="deathIntermediate" value="${escapeHtml(d.intermediate||'Pneumonia')}"></div><div class="field"><label>Underlying cause</label><input id="deathUnderlying" value="${escapeHtml(d.underlying||'')}"></div><div class="field"><label>Contributing conditions</label><input id="deathContributing" value="${escapeHtml(d.contributing||'Diabetes mellitus, hypertension')}"></div><div class="field full"><label>Body release / mortuary status</label><select id="deathBodyRelease"><option ${d.bodyRelease==='Pending'?'selected':''}>Pending</option><option ${d.bodyRelease==='Released to morgue'?'selected':''}>Released to morgue</option><option ${d.bodyRelease==='Released to family / authorized person'?'selected':''}>Released to family / authorized person</option></select></div></div><button class="btn outline" id="saveDeath" style="margin-top:12px">Save Death / Mortality Documentation</button><div class="practice-alert danger"><strong>Mortality coding note:</strong> The coding step must identify the underlying cause that started the chain of events, not only the terminal event. Query the physician if the sequence is unclear.</div>`;
+  }
+
+  function recordsReviewSnapshot(){
+    const open=state.missingDocs.filter(d=>d.status!=='Completed');
+    return `<div class="table-wrap" style="margin-top:14px"><table class="table"><thead><tr><th>Document</th><th>Responsible unit</th><th>Status</th></tr></thead><tbody>${open.map(d=>`<tr><td>${escapeHtml(d.document)}</td><td>${escapeHtml(d.unit)}</td><td>${statusPill(d.status)}</td></tr>`).join('') || '<tr><td colspan="3">No open missing documents.</td></tr>'}</tbody></table></div>`;
+  }
+
+  function codingOutcomePanel(){
+    const his=ensureHisState();
+    return `<div class="grid cols-2"><div class="card soft"><h4>Morbidity coding</h4><p>Code principal diagnosis, secondary diagnoses, procedures, operations, complications and relevant external causes after documentation is complete.</p><button class="btn outline" data-go="coding">Open Medical Coding Lab</button></div><div class="card soft"><h4>Mortality coding</h4><p>${his.outcome==='Death'?'This case is marked as death/expired. Use the death certificate sequence to practice underlying cause-of-death selection.':'Mortality coding becomes active when the outcome path is Death.'}</p><span class="pill ${his.outcome==='Death'?'danger':'gray'}">${his.outcome==='Death'?'Mortality path active':'Not a death case'}</span></div></div>`;
+  }
+
+  function billingPanel(){
+    return simpleStageForm('billing','Billing Finalization','Billing status','Charges and codes reviewed for fictional case','Insurance / payment remarks','Final billing depends on documented services, coding completion and insurance status.');
+  }
+
+  function statusPill(s){
+    const low=(s||'').toLowerCase();
+    let cls='gray'; if(low.includes('complete')||low.includes('entered')||low.includes('checked')||low.includes('discharged')) cls='success'; else if(low.includes('pending')||low.includes('needs')||low.includes('transferred')) cls='warning'; else if(low.includes('escalated')||low.includes('risk')||low.includes('expired')||low.includes('death')) cls='danger'; else if(low.includes('progress')||low.includes('started')||low.includes('admitted')) cls='blue';
+    return `<span class="pill ${cls}">${s}</span>`;
+  }
+  function escapeHtml(str){return String(str).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+  function mailto(subject, body){
+    const to='motahhareh.khorshidzadeh@gmail.com';
+    return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+  function fieldValue(id){ return ($(id)?.value || '').trim(); }
+
+  function bindView(view){
+    document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{state.currentView=b.dataset.go;saveState();render();}));
+    if(view==='dashboard') bindDashboard();
+    if(view==='his') bindHISGuide();
+    if(view==='terminology') bindTerminology();
+    if(view==='learning') bindLearning();
+    if(view==='quiz') bindQuiz();
+    if(view==='simulator') bindSimulator();
+    if(view==='coding') bindCoding();
+    if(view==='library') bindMedicalLibrary();
+    if(view==='directory') bindWebDirectory();
+    if(view==='checklists') bindOfficialChecklists();
+    if(view==='archive') bindMedicalArchive();
+    if(view==='statistics') bindMedicalStatistics();
+    if(view==='telehealth') bindTelehealth();
+    if(view==='feedback') bindFeedback();
+    if(view==='collaboration') bindCollaboration();
+    if(view==='reports') bindReports();
+  }
+
+
+
+
+  const checklistItems = [
+    {field:'Surgery & Operating Room', specialty:'Surgical safety', title:'WHO Surgical Safety Checklist', type:'Official source + training PDF', icon:'🛡️', pdf:'assets/pdfs/checklists/surgical_safety_checklist_training.pdf', source:'https://www.who.int/publications/i/item/9789241598590', note:'Use for Sign In, Time Out and Sign Out safety checks in surgical workflow training.'},
+    {field:'Nursing', specialty:'Medication administration', title:'Medication Administration Safety Checklist', type:'Training PDF template', icon:'💊', pdf:'assets/pdfs/checklists/medication_administration_safety_checklist.pdf', source:'https://www.who.int/teams/integrated-health-services/patient-safety/research/safe-medication', note:'Use for patient identification, allergy review, medication rights, documentation and monitoring.'},
+    {field:'Nursing', specialty:'Patient assessment', title:'Nursing Admission Assessment Checklist', type:'Training PDF template', icon:'🩺', pdf:'assets/pdfs/checklists/nursing_admission_assessment_checklist.pdf', source:'https://www.ncbi.nlm.nih.gov/books/', note:'Use for initial nursing assessment, risk screening and care-plan preparation.'},
+    {field:'Medical Records & HIM', specialty:'Record completeness', title:'Medical Record Completeness Checklist', type:'Training PDF template', icon:'🗂️', pdf:'assets/pdfs/checklists/medical_record_completeness_checklist.pdf', source:'https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-G/part-482/subpart-C/section-482.24', note:'Use for quantitative and qualitative checking before coding and archive.'},
+    {field:'Laboratory', specialty:'Specimen safety', title:'Laboratory Specimen Collection Checklist', type:'Training PDF template', icon:'🧪', pdf:'assets/pdfs/checklists/laboratory_specimen_collection_checklist.pdf', source:'https://www.cdc.gov/labquality/index.html', note:'Use for specimen identity, collection, labeling, transport and result documentation.'},
+    {field:'Radiology', specialty:'Imaging safety', title:'Radiology Request and Safety Checklist', type:'Training PDF template', icon:'🩻', pdf:'assets/pdfs/checklists/radiology_request_safety_checklist.pdf', source:'https://www.dicomstandard.org/', note:'Use for imaging request completeness, pregnancy/safety check and report availability.'},
+    {field:'Emergency Medicine', specialty:'Triage', title:'Emergency Triage Documentation Checklist', type:'Training PDF template', icon:'🚑', pdf:'assets/pdfs/checklists/emergency_triage_documentation_checklist.pdf', source:'https://www.who.int/emergencycare/en/', note:'Use for arrival mode, acuity, vital signs, red flags and handover documentation.'},
+    {field:'Public Health & Infection Prevention', specialty:'Infection prevention', title:'Infection Prevention Checklist', type:'Training PDF template', icon:'🧼', pdf:'assets/pdfs/checklists/infection_prevention_checklist.pdf', source:'https://www.cdc.gov/infection-control/index.html', note:'Use for hand hygiene, PPE, isolation, device-associated infection prevention and environmental controls.'},
+    {field:'Midwifery', specialty:'Maternity documentation', title:'Maternal and Newborn Documentation Checklist', type:'Training PDF template', icon:'🤰', pdf:'assets/pdfs/checklists/maternal_newborn_documentation_checklist.pdf', source:'https://www.who.int/teams/maternal-newborn-child-adolescent-health-and-ageing', note:'Use for antenatal, labour, delivery, newborn and postnatal documentation.'},
+    {field:'Dentistry', specialty:'Oral health', title:'Dental Record Documentation Checklist', type:'Training PDF template', icon:'🦷', pdf:'assets/pdfs/checklists/dental_record_documentation_checklist.pdf', source:'https://www.who.int/health-topics/oral-health', note:'Use for dental history, charting, treatment plan, consent and follow-up documentation.'}
+  ];
+  function officialChecklists(){
+    const fields=['Select specialty area', ...Array.from(new Set(checklistItems.map(x=>x.field)))];
+    const f=state.checklistField || 'Select specialty area';
+    const subopts=f==='Select specialty area'?['Select checklist topic']:['Select checklist topic',...Array.from(new Set(checklistItems.filter(x=>x.field===f).map(x=>x.specialty)))];
+    const s=subopts.includes(state.checklistSub)?state.checklistSub:'Select checklist topic';
+    const rows=(f==='Select specialty area'||s==='Select checklist topic')?[]:checklistItems.filter(x=>x.field===f && x.specialty===s);
+    return html`<div class="card"><div class="section-title" style="margin-top:0"><div><h3>Official Checklists</h3><p>Select a specialty area and checklist topic. Results are shown only after selection. Each card includes a downloadable PDF template and an official/open source link for reference.</p></div><span class="pill success">PDF downloads</span></div><div class="form-grid"><div class="field"><label>Specialty area</label><select id="checklistField">${fields.map(x=>`<option ${x===f?'selected':''}>${escapeHtml(x)}</option>`).join('')}</select></div><div class="field"><label>Checklist topic</label><select id="checklistSub" ${f==='Select specialty area'?'disabled':''}>${subopts.map(x=>`<option ${x===s?'selected':''}>${escapeHtml(x)}</option>`).join('')}</select></div></div>${!rows.length?`<div class="empty">Choose a specialty area and checklist topic to view available PDF checklists.</div>`:''}</div><div class="library-grid book-results-grid" style="margin-top:18px">${rows.map(r=>`<article class="library-card checklist-card"><div class="book-cover"><div class="book-icon">${r.icon}</div><div><b>${escapeHtml(r.specialty)}</b><small>${escapeHtml(r.field)}</small></div></div><h3>${escapeHtml(r.title)}</h3><p><strong>Type:</strong> ${escapeHtml(r.type)}</p><p>${escapeHtml(r.note)}</p><div class="hero-actions"><a class="btn small" href="${r.pdf}" target="_blank" rel="noopener noreferrer">Download PDF</a><a class="btn outline small" href="${r.source}" target="_blank" rel="noopener noreferrer">Open official source</a></div></article>`).join('')}</div>`;
+  }
+  function bindOfficialChecklists(){
+    $('checklistField')?.addEventListener('change',()=>{ state.checklistField=$('checklistField').value; state.checklistSub='Select checklist topic'; saveState(); render(); });
+    $('checklistSub')?.addEventListener('change',()=>{ state.checklistSub=$('checklistSub').value; saveState(); render(); });
+  }
+
+
+  const filingSections = [
+    'Medical Filing Systems',
+    'Medical Record Retention & Disposition'
+  ];
+
+  const filingTopics = [
+    {
+      section:'Medical Filing Systems',
+      type:'Centralized medical filing system',
+      icon:'🏢',
+      image:'assets/filing_images/centralized_filing_room.svg',
+      description:'A centralized system keeps the official paper or hybrid record in one Medical Records or Health Information Management department. It controls receipt, filing, tracking, retrieval, confidentiality, scanning, release of information and final custody.',
+      usefulFor:'Large hospitals, teaching hospitals, tertiary centers, multi-specialty hospitals and facilities that need one official record location with strict custody control.',
+      example:'After discharge, the ward sends the complete folder to HIM. The receiving officer checks the discharge list, logs receipt, compares with the paper chart, routes deficiencies if needed, then files or scans the chart under the official medical record number.',
+      records:'Registration forms, consent forms, history and physical, physician orders, nursing notes, medication records, laboratory/radiology reports, operative/anesthesia records, discharge summaries, death forms and coding worksheets.',
+      laws:'Medical records should be completed, filed, retained, retrievable and protected from unauthorized access. The hospital should have adequate personnel and systems for filing and retrieval.',
+      process:['Receive chart from ward/discharge office','Match patient identifiers and encounter number','Log custody and date received','Check folder order and required forms','Route incomplete charts to deficiency follow-up','Index, scan or file by official method','Retrieve only through authorized requests'],
+      sources:[['eCFR 42 CFR 482.24 - Medical record services','https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-G/part-482/subpart-C/section-482.24'],['NHS Records Management Code of Practice','https://digital.nhs.uk/data-and-information/information-governance/guidance/records-management-code-of-practice']]
+    },
+    {
+      section:'Medical Filing Systems',
+      type:'Active medical records filing',
+      icon:'📂',
+      image:'assets/filing_images/active_inactive_filing.svg',
+      description:'Active filing stores records still needed for current care, follow-up, coding, billing, audit, physician completion, legal review or frequent retrieval. Active files must be immediately traceable.',
+      usefulFor:'Outpatient clinics, discharge deficiency areas, coding queues, emergency follow-up units, maternity follow-up and specialty services with frequent record use.',
+      example:'A recently discharged inpatient record has pending physician signature and coding review. It remains in the active deficiency/coding area until completion, then moves to final filing or inactive storage.',
+      records:'Recent discharges, outpatient follow-up files, incomplete records, coding pending charts, diagnostic pending documents and active legal/review files.',
+      laws:'Active records must be secure, complete, accessible to authorized users and protected from unauthorized alteration. The movement of every folder should be traceable.',
+      process:['Identify active status','Assign responsible work queue','Use tracer/out-guide when moved','Monitor completion deadline','Return to HIM when complete','Move to inactive/archive when retrieval frequency drops'],
+      sources:[['eCFR 42 CFR 482.24 - completion, filing and retrieval','https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-G/part-482/subpart-C/section-482.24']]
+    },
+    {
+      section:'Medical Filing Systems',
+      type:'Inactive medical records filing',
+      icon:'🗄️',
+      image:'assets/filing_images/active_inactive_filing.svg',
+      description:'Inactive filing stores records that are no longer frequently used but must still be retained for clinical, legal, administrative, research, coding, audit or public-health purposes.',
+      usefulFor:'Hospitals with large historic files, off-site archive centers, closed service units, scanned legacy paper projects and long-term retention stores.',
+      example:'Records older than the active period are boxed, assigned a location code, indexed in the archive register and retrieved only through a formal request.',
+      records:'Closed inpatient charts, old outpatient folders, emergency records, old diagnostic reports, death records, surgical records and long-term legal records.',
+      laws:'Inactive records must remain retrievable and confidential until their approved retention period expires and disposition is authorized.',
+      process:['Classify as inactive','Verify completion/coding','Assign box or digital archive ID','Update archive index','Restrict access','Review retention schedule before destruction or permanent preservation'],
+      sources:[['NHS Records Management Code of Practice','https://digital.nhs.uk/data-and-information/information-governance/guidance/records-management-code-of-practice'],['eCFR 42 CFR 482.24 - form and retention of record','https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-G/part-482/subpart-C/section-482.24']]
+    },
+    {
+      section:'Medical Filing Systems',
+      type:'Terminal digit filing',
+      icon:'🔚',
+      image:'assets/filing_images/terminal_digit_filing.svg',
+      description:'Terminal digit filing divides the medical record number into groups and files primarily by the last digit group. It spreads workload across shelves and reduces congestion in high-volume filing rooms.',
+      usefulFor:'Large hospitals, teaching hospitals and high-volume HIM departments with many daily file pulls.',
+      example:'MRN 12-34-56 is filed first under terminal group 56, then middle group 34, then initial group 12.',
+      records:'Paper medical folders arranged by grouped record numbers, often supported by color coding and shelf guides.',
+      laws:'Whatever filing method is selected, the hospital must be able to retrieve records promptly and protect confidentiality.',
+      process:['Split MRN into digit groups','Locate terminal section','Sort by middle group','Sort by initial group','Apply color coding','Perform misfile audits'],
+      sources:[['eCFR 42 CFR 482.24 - filing and retrieval','https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-G/part-482/subpart-C/section-482.24']]
+    },
+    {
+      section:'Medical Filing Systems',
+      type:'Hybrid paper-electronic filing',
+      icon:'🗂️',
+      image:'assets/filing_images/hybrid_scanning_indexing.svg',
+      description:'Hybrid filing combines paper forms, scanned documents and electronic records. It requires scanning rules, document indexing, image-quality review, version control and legal health record policy.',
+      usefulFor:'Hospitals moving from paper to EHR, surgical consent workflows, outside reports, referrals, legacy chart scanning and facilities with mixed documentation.',
+      example:'A paper surgical consent is signed, scanned, indexed as Consent / Surgery / Encounter Date, checked for readability and retained or disposed according to the approved policy.',
+      records:'Paper consents, outside reports, external referrals, scanned legacy records, lab/radiology paper reports and hybrid legal record documents.',
+      laws:'Records may be maintained in original or legally reproduced form when authenticity, integrity, security and retrieval are protected by policy.',
+      process:['Prepare paper','Scan to approved quality','Index by patient/encounter/document type','Perform quality review','Mark legal status','Apply retention rule for paper original'],
+      sources:[['eCFR 42 CFR 482.24 - form and retention of record','https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-G/part-482/subpart-C/section-482.24'],['NHS Records Management Code of Practice','https://digital.nhs.uk/data-and-information/information-governance/guidance/records-management-code-of-practice']]
+    },
+    {
+      section:'Medical Record Retention & Disposition',
+      type:'Retention schedule by medical record type',
+      icon:'⏳',
+      image:'assets/filing_images/record_disposition_destruction.svg',
+      description:'A retention schedule states how long each medical record type must be kept before destruction, transfer to archive or permanent preservation. Time periods must follow local law, Ministry of Health rules, professional guidance and hospital policy.',
+      usefulFor:'All health facilities, HIM departments, legal offices, archive services and hospitals preparing destruction or long-term preservation decisions.',
+      example:'A hospital checks if adult inpatient charts have passed the minimum retention period, then separately checks pediatric, maternity, death, oncology, legal-hold and research records because these may require longer retention.',
+      records:'Adult records, pediatric records, newborn records, maternity records, deceased-patient records, oncology registries, surgical records, diagnostic reports, laboratory/radiology records and legal-case files.',
+      laws:'In the U.S. Medicare hospital rule, hospital medical records must be retained in original or legally reproduced form for at least 5 years. Other countries and organizations may require longer periods; local law always controls.',
+      process:['Classify record series','Check patient age and special category','Check minimum retention period','Check legal/audit/research hold','Decide keep, archive, transfer or destroy','Document approval and action'],
+      sources:[['eCFR 42 CFR 482.24 - minimum hospital retention','https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-G/part-482/subpart-C/section-482.24'],['NHS Records Management Code of Practice','https://digital.nhs.uk/data-and-information/information-governance/guidance/records-management-code-of-practice']]
+    },
+    {
+      section:'Medical Record Retention & Disposition',
+      type:'Special records: deceased, newborn, pediatric, maternity and legal cases',
+      icon:'🧸',
+      image:'assets/filing_images/record_disposition_destruction.svg',
+      description:'Special records often require longer protection because they involve vital events, minors, birth history, death certification, legal risk, registries or long-term clinical/public-health value.',
+      usefulFor:'Maternity hospitals, pediatric units, neonatal units, oncology services, emergency departments, death documentation workflows and medico-legal archives.',
+      example:'A newborn record may need to be linked to the mother’s maternity record and retained according to child/minor rules. A deceased-patient chart may need preservation of death documentation, body release, death certificate support and mortality coding evidence.',
+      records:'Newborn records, stillbirth documentation, maternity charts, pediatric records, death charts, body release forms, autopsy/coroner/medical examiner documents, oncology registry data and legal-hold charts.',
+      laws:'Do not destroy special records using the ordinary adult schedule unless the local retention schedule explicitly allows it. Vital statistics and registry records may be permanent in official systems.',
+      process:['Flag special category','Link related mother/newborn or death documentation','Check specific retention rule','Store separately or with restricted access if policy requires','Review before any destruction','Record final archive/disposition decision'],
+      sources:[['CDC/NCHS death certificate form','https://www.cdc.gov/nchs/data/dvs/death11-03final-acc.pdf'],['CDC/NCHS death certification handbook','https://www.cdc.gov/nchs/data/misc/hb_cod.pdf'],['NHS Records Management Code of Practice','https://digital.nhs.uk/data-and-information/information-governance/guidance/records-management-code-of-practice']]
+    },
+    {
+      section:'Medical Record Retention & Disposition',
+      type:'Secure destruction and destruction register',
+      icon:'♻️',
+      image:'assets/filing_images/record_disposition_destruction.svg',
+      description:'Secure destruction is allowed only after the retention period expires, no legal hold exists, no audit/research hold exists and authorized approval is recorded. Destruction must protect confidentiality and leave an evidence trail.',
+      usefulFor:'Hospitals, clinics, scanning projects, inactive file rooms, off-site archive vendors and closed departments.',
+      example:'Expired records are listed by series, date range and box number; HIM checks legal holds, obtains approval, uses a secure destruction vendor, receives a certificate and updates the archive index.',
+      records:'Expired paper charts, approved duplicate copies, temporary working papers, superseded scanned paper when legally permitted and inactive files approved for destruction.',
+      laws:'Destruction must follow the applicable retention schedule and privacy/security rules. Unauthorized destruction can create legal, clinical and audit risk.',
+      process:['Create destruction list','Verify retention expiry','Check legal/audit/research hold','Obtain written approval','Destroy securely','Receive certificate of destruction','Update destruction register and archive index'],
+      sources:[['NHS Records Management Code of Practice','https://digital.nhs.uk/data-and-information/information-governance/guidance/records-management-code-of-practice'],['HHS HIPAA Security guidance','https://www.hhs.gov/hipaa/for-professionals/security/index.html']]
+    },
+    {
+      section:'Medical Record Retention & Disposition',
+      type:'Records kept permanently or preserved before destruction review',
+      icon:'🏛️',
+      image:'assets/filing_images/record_disposition_destruction.svg',
+      description:'Some health information should not be destroyed until permanent preservation or official transfer has been considered, especially vital statistics, registries, historical records, legal precedent, unusual incidents or long-term public-health datasets.',
+      usefulFor:'HIM managers, hospital archivists, legal departments, registries, research governance teams and public hospitals with historical record responsibilities.',
+      example:'A hospital may preserve a historical register, cancer registry dataset, birth/death register evidence or disaster/mass-casualty record according to institutional archive policy instead of routine destruction.',
+      records:'Birth registers, death registers, cancer registry extracts, special incident records, historical hospital registers, legal-case indexes, destruction registers and permanent archive indexes.',
+      laws:'Permanent retention depends on local law, archival policy, public health registry rules and institutional governance. Always verify before destruction.',
+      process:['Identify potential permanent value','Consult retention schedule and archivist/legal team','Apply registry/vital statistics rules','Document preservation decision','Store with controlled access','Review periodically'],
+      sources:[['WHO Global Reference List of Core Health Indicators','https://www.who.int/publications/i/item/9789241565546'],['CDC/NCHS National Vital Statistics System','https://www.cdc.gov/nchs/nvss/index.htm']]
+    }
+  ];
+
+  function retentionMatrixHtml(){
+    const rows=[
+      ['Adult inpatient/outpatient record','Retain for the minimum period required by local law and hospital policy; do not destroy while open, under audit, litigation, complaint, research hold or coding review.','Routine destruction only after authorized retention review and destruction approval.'],
+      ['Minor / pediatric record','Often retained longer than adult records because the retention clock may extend beyond age of majority.','Do not destroy until local minor-record rules are checked and authorization is documented.'],
+      ['Newborn and maternity record','Keep linked mother-baby identifiers, delivery record, newborn record, birth register evidence and neonatal outcome data together or cross-referenced.','Special control is required because these records support identity, birth statistics and maternal-newborn audit.'],
+      ['Death / expired patient record','Keep death summary, death certificate data, cause-of-death sequence, body release, mortuary handover and mortality coding evidence.','Do not destroy without checking vital statistics, legal hold, coroner/medical examiner, mortality review and institutional retention rules.'],
+      ['Oncology, registry or long-term disease record','May support cancer registry, long-term follow-up, research governance and public-health reporting.','Review for extended or permanent preservation before disposal.'],
+      ['Medicolegal, incident, occupational injury or litigation record','Retain until legal hold is released and the legal/quality office approves disposition.','Never destroy while investigation, claim, complaint, subpoena or audit is active.'],
+      ['Registers and indexes','Birth/death registers, destruction registers, master patient index extracts and archive control logs may need long-term or permanent retention.','Preserve according to institutional archive and public-health rules.'],
+      ['Duplicate, temporary or working copy','Destroy securely when no longer required and when it is not the official record.','Use confidential shredding or approved secure disposal with log entry.']
+    ];
+    return `<div class="retention-matrix"><h4>Retention and disposition decision guide</h4><div class="table-wrap"><table class="table"><thead><tr><th>Record type</th><th>Retention / control rule</th><th>Disposition note</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${escapeHtml(r[0])}</td><td>${escapeHtml(r[1])}</td><td>${escapeHtml(r[2])}</td></tr>`).join('')}</tbody></table></div><p class="source-note">Retention periods differ by country and facility policy. Always verify the local Ministry of Health, hospital policy, legal hold, registry and public-health requirements before destruction.</p></div>`;
+  }
+  function medicalArchive(){
+    const section=state.archiveSection || 'Medical Filing Systems';
+    const selected=state.archiveType || '';
+    const sectionRows=filingTopics.filter(x=>x.section===section);
+    const rows=selected?sectionRows.filter(x=>x.type===selected):[];
+    return html`<div class="card"><div class="section-title" style="margin-top:0"><div><h3>Medical Filing</h3><p>This module contains two areas: Medical Filing Systems and Medical Record Retention & Disposition. The disposition area focuses on what records are retained, what may be destroyed after the retention period, what may need permanent preservation, and how special records such as deaths, newborns, maternity, minors, oncology and legal cases are controlled.</p></div><span class="pill success">Filing & disposition</span></div><div class="grid cols-2"><div class="field"><label>Section</label><select id="archiveSection">${filingSections.map(x=>`<option value="${escapeHtml(x)}" ${x===section?'selected':''}>${escapeHtml(x)}</option>`).join('')}</select></div><div class="field"><label>Topic</label><select id="archiveType"><option value="">Select topic...</option>${sectionRows.map(x=>`<option value="${escapeHtml(x.type)}" ${x.type===selected?'selected':''}>${escapeHtml(x.type)}</option>`).join('')}</select></div></div>${!selected?'<div class="empty">Select a topic to view the filing model, use case, example, process, rules and official source links.</div>':''}</div><div class="grid cols-1" style="margin-top:18px">${rows.map(x=>`<div class="card archive-card filing-card pro-filing-card"><div class="filing-header-row"><div class="archive-icon">${x.icon}</div><div><h3>${escapeHtml(x.type)}</h3><p class="mini">${escapeHtml(x.section)}</p></div></div><img class="filing-image" src="${escapeHtml(x.image)}" alt="${escapeHtml(x.type)} visual model"><div class="filing-info-grid"><div><h4>Full explanation</h4><p>${escapeHtml(x.description)}</p></div><div><h4>Best used for</h4><p>${escapeHtml(x.usefulFor)}</p></div><div><h4>Practical example</h4><p>${escapeHtml(x.example)}</p></div><div><h4>Hospital records / forms involved</h4><p>${escapeHtml(x.records)}</p></div></div><div class="filing-law-box"><h4>Rules and legal/professional basis</h4><p>${escapeHtml(x.laws)}</p></div><div><h4>Recommended process</h4>${processHtml(x.process)}</div><div class="source-list">${x.sources.map(src=>`<a class="btn outline small" href="${src[1]}" target="_blank" rel="noopener noreferrer">${escapeHtml(src[0])}</a>`).join('')}</div>${section==='Medical Record Retention & Disposition'?retentionMatrixHtml():''}</div>`).join('')}</div>`;
+  }
+  function bindMedicalArchive(){ $('archiveSection')?.addEventListener('change',()=>{ state.archiveSection=$('archiveSection').value; state.archiveType=''; saveState(); render(); }); $('archiveType')?.addEventListener('change',()=>{ state.archiveType=$('archiveType').value; saveState(); render(); }); }
+
+
+  const hospitalStatisticItems = [
+    {category:'Patient Flow', name:'Daily Ward Census', frequency:'Daily', definition:'Counts beds, occupied beds, admissions, transfers, discharges, deaths and patient days by ward.', completedBy:'Ward clerk / Nurse-in-charge', sentTo:'HIM Statistics Unit and Hospital Administration', excel:'Daily Census sheet', why:'Base form for bed occupancy, patient days and ward workload monitoring.'},
+    {category:'Patient Flow', name:'Admission, Discharge, Transfer and Death Log', frequency:'Daily', definition:'Tracks admissions, discharges, transfers, deaths, LAMA/DAMA and patient route.', completedBy:'Registration / Admission / Discharge Office', sentTo:'HIM Statistics Unit, Discharge Office and Hospital Administration', excel:'Admission Discharge Log sheet', why:'Controls hospital patient movement and supports daily management reporting.'},
+    {category:'Patient Flow', name:'Transfer and Referral Statistics', frequency:'Daily / Monthly', definition:'Counts transfers to other hospitals, internal transfers and referrals by source and destination.', completedBy:'Bed management / Ward clerk / Discharge office', sentTo:'HIM Statistics Unit and Hospital Administration', excel:'Admission Discharge Log and Monthly Summary sheets', why:'Shows service pressure, referral patterns and continuity-of-care movement.'},
+    {category:'Bed Utilization', name:'Bed Occupancy Rate', frequency:'Daily / Monthly / Annual', definition:'Patient days divided by available bed days.', completedBy:'Ward clerk and HIM Statistics Officer', sentTo:'Hospital Administration, Bed Management and Quality Department', excel:'Daily Census, Monthly Summary and Annual Summary sheets', why:'Measures bed utilization and capacity pressure.'},
+    {category:'Bed Utilization', name:'Average Length of Stay', frequency:'Monthly / Annual', definition:'Total inpatient days divided by discharges/deaths for the same period.', completedBy:'HIM Statistics Officer', sentTo:'Hospital Administration and service managers', excel:'Monthly Summary / Annual Summary workbook area', why:'Shows resource use and efficiency by ward or specialty.'},
+    {category:'Mortality', name:'Hospital Death Statistics', frequency:'Daily / Monthly / Annual', definition:'Counts inpatient, ED, maternal, neonatal and service-specific deaths.', completedBy:'Physician, Medical Coder and HIM Statistics Officer', sentTo:'HIM, Quality, Mortality Review Committee and vital statistics/public health reporting when required', excel:'Mortality Statistics sheet', why:'Supports mortality review, cause-of-death coding and quality monitoring.'},
+    {category:'Mortality', name:'Cause-of-Death Coding Statistics', frequency:'Monthly / Annual', definition:'Tracks immediate cause, underlying cause, contributing conditions, manner of death and coding status.', completedBy:'Certifying physician and Medical Coder', sentTo:'HIM, vital statistics office/public health authority as required', excel:'Mortality Statistics sheet', why:'Supports accurate mortality statistics and death certification quality.'},
+    {category:'Surgery', name:'Surgical and Procedure Statistics', frequency:'Daily / Monthly / Annual', definition:'Counts major/minor procedures, emergency/elective operations, complications, deaths and OR utilization hours.', completedBy:'OR Nurse, Surgeon, Anesthesiologist and OR Manager', sentTo:'HIM, OR Manager, Quality Department and Hospital Administration', excel:'Surgery Statistics sheet', why:'Measures procedure volume, OR workload and surgical quality indicators.'},
+    {category:'Outpatient', name:'OPD Statistics', frequency:'Daily / Monthly', definition:'Counts new visits, follow-up visits, no-shows, ED referrals and admissions from clinic.', completedBy:'Clinic clerk / Clinic nurse', sentTo:'HIM Statistics Unit and OPD Manager', excel:'OPD Statistics sheet', why:'Monitors outpatient workload and referral/admission patterns.'},
+    {category:'Emergency', name:'Emergency Department Statistics', frequency:'Daily / Monthly', definition:'Counts triage category, ED cases, admissions, discharges from ED, transfers, ED deaths and waiting time.', completedBy:'ED Nurse-in-charge / ED clerk', sentTo:'HIM, ED Manager, Quality Department and Hospital Administration', excel:'Emergency Statistics sheet', why:'Supports ED workload, access and safety review.'},
+    {category:'Diagnostic Services', name:'Laboratory Statistics', frequency:'Daily / Monthly', definition:'Counts test requests, completed tests, pending tests, critical results and turnaround time.', completedBy:'Laboratory supervisor', sentTo:'HIM, Laboratory Manager and Quality Department', excel:'Diagnostic Services sheet', why:'Monitors lab workload, pending tests and turnaround time.'},
+    {category:'Diagnostic Services', name:'Radiology Statistics', frequency:'Daily / Monthly', definition:'Counts imaging requests, completed studies, pending studies, critical findings and turnaround time.', completedBy:'Radiology supervisor', sentTo:'HIM, Radiology Manager and Quality Department', excel:'Diagnostic Services sheet', why:'Monitors imaging workload and reporting performance.'},
+    {category:'Maternity and Birth', name:'Maternity and Birth Statistics', frequency:'Daily / Monthly / Annual', definition:'Counts live births, stillbirths, C-sections, normal deliveries, maternal deaths, neonatal deaths and low birth weight.', completedBy:'Midwife / Maternity ward clerk / Obstetric team', sentTo:'HIM and maternal-child health reporting authority when required', excel:'Maternity Birth Stats sheet', why:'Supports birth statistics and maternal/neonatal service monitoring.'},
+    {category:'HIM and Records', name:'Medical Records Completeness Statistics', frequency:'Daily / Monthly', definition:'Counts discharged records received, complete records, incomplete records, returned deficiencies and open pending items.', completedBy:'Medical Records Receiving Officer / Record reviewer', sentTo:'HIM Manager, Quality Department and clinical departments', excel:'HIM Coding Archive Stats sheet', why:'Monitors documentation quality and record readiness.'},
+    {category:'HIM and Records', name:'Coding and Archive Statistics', frequency:'Daily / Monthly', definition:'Counts coding completed, coding pending, coding queries, archived records and coding completion rate.', completedBy:'Medical Coder / Archive Officer / HIM Statistics Officer', sentTo:'HIM Manager and Hospital Administration', excel:'HIM Coding Archive Stats sheet', why:'Tracks coding productivity, archive status and post-discharge workflow.'},
+    {category:'Analytics Summary', name:'Monthly and Annual Statistical Summary', frequency:'Monthly / Annual', definition:'Aggregates daily service forms into hospital-level indicators.', completedBy:'HIM Statistics Officer', sentTo:'Hospital Administration, Quality Department, Finance and external reporting authorities if required', excel:'Monthly Summary, Annual Summary and Dashboard sheets', why:'Provides management-level analysis from raw daily forms.'}
+  ];
+
+
+  const hospitalStatisticsWebsites = [
+    {name:'WHO Global Health Observatory', icon:'🌍', type:'Global health data', url:'https://www.who.int/data/gho', note:'WHO indicators, countries, dashboards, data API, mortality, maternal/child health and global health datasets.'},
+    {name:'WHO Mortality Database', icon:'⚰️', type:'Mortality statistics', url:'https://platform.who.int/mortality', note:'Mortality data by country, year, age, sex and cause of death.'},
+    {name:'CDC/NCHS', icon:'🏛️', type:'US health statistics', url:'https://www.cdc.gov/nchs/', note:'National health statistics, surveys, vital statistics and health data resources.'},
+    {name:'CDC National Hospital Care Survey', icon:'🏥', type:'Hospital care data', url:'https://www.cdc.gov/nchs/nhcs/', note:'Hospital care statistics and emergency/inpatient/outpatient data resources.'},
+    {name:'AHRQ HCUP', icon:'📊', type:'Hospital utilization data', url:'https://www.hcup-us.ahrq.gov/', note:'Healthcare Cost and Utilization Project tools for inpatient, emergency and ambulatory surgery statistics.'},
+    {name:'HCUPnet', icon:'🔎', type:'Query hospital statistics', url:'https://hcupnet.ahrq.gov/', note:'Online query system for HCUP-based healthcare statistics.'},
+    {name:'OECD Health Statistics', icon:'🌐', type:'International health indicators', url:'https://www.oecd.org/en/data/datasets/oecd-health-statistics.html', note:'OECD health expenditure, resources, utilization, quality and outcome indicators.'},
+    {name:'Eurostat Health Database', icon:'🇪🇺', type:'European health statistics', url:'https://ec.europa.eu/eurostat/web/health/database', note:'European health, hospital, morbidity, mortality and care indicators.'},
+    {name:'NHS England Statistics', icon:'🇬🇧', type:'Hospital activity data', url:'https://www.england.nhs.uk/statistics/', note:'Official NHS activity, waiting times, hospital and service statistics.'},
+    {name:'World Bank Health Data', icon:'💹', type:'Development indicators', url:'https://data.worldbank.org/topic/health', note:'Country-level health, population, mortality, service and health system indicators.'}
+  ];
+
+  function medicalStatistics(){
+    const cats=['Select statistics category',...Array.from(new Set(hospitalStatisticItems.map(x=>x.category)))];
+    const cat=state.statsArea || 'Select statistics category';
+    const rows=cat==='Select statistics category'?[]:hospitalStatisticItems.filter(x=>x.category===cat);
+    return html`<div class="card"><div class="section-title" style="margin-top:0"><div><h3>Hospital Statistics Indicators</h3><p>Select a statistics category to learn hospital indicators, completion responsibility, reporting destination, source data and interpretation rules. Official statistics websites are linked below as icon cards.</p></div><span class="pill success">Indicators & official links</span></div><div class="stats-link-grid">${hospitalStatisticsWebsites.map(s=>`<a class="stats-link-card" href="${s.url}" target="_blank" rel="noopener noreferrer"><span>${s.icon}</span><strong>${escapeHtml(s.name)}</strong><small>${escapeHtml(s.type)}</small><p>${escapeHtml(s.note)}</p></a>`).join('')}</div><div class="form-grid" style="margin-top:18px"><div class="field"><label>Statistics category</label><select id="statsArea">${cats.map(x=>`<option ${x===cat?'selected':''}>${escapeHtml(x)}</option>`).join('')}</select></div></div>${!rows.length?'<div class="empty">Choose a statistics category to display the indicator list and rules.</div>':''}</div><div class="grid cols-1" style="margin-top:18px">${rows.map(x=>`<div class="card stats-form-card stats-rule-card"><div class="archive-icon">📈</div><h3>${escapeHtml(x.name)}</h3><div class="filing-info-grid"><div><h4>Frequency</h4><p>${escapeHtml(x.frequency)}</p></div><div><h4>Definition</h4><p>${escapeHtml(x.definition)}</p></div><div><h4>Completed by</h4><p>${escapeHtml(x.completedBy)}</p></div><div><h4>Reported / sent to</h4><p>${escapeHtml(x.sentTo)}</p></div></div><div class="filing-law-box"><h4>Source data and completion rules</h4><p><strong>Source data:</strong> ${escapeHtml(x.sourceData || x.excel || 'Ward registers, service logs, patient movement records and HIM reporting records.')}<br><strong>How to complete:</strong> ${escapeHtml(x.rules || x.why || 'Collect only verified counts from official service registers, reconcile with patient movement records, and submit according to hospital policy and local reporting requirements.')}</p></div></div>`).join('')}</div>`;
+  }
+  function bindMedicalStatistics(){
+    $('statsArea')?.addEventListener('change',()=>{ state.statsArea=$('statsArea').value; saveState(); render(); });
+  }
+
+  function bindWebDirectory(){
+    $('directoryCat')?.addEventListener('change',()=>{ state.directoryCat=$('directoryCat').value; state.directorySub=''; saveState(); render(); });
+    $('directorySub')?.addEventListener('change',()=>{ state.directorySub=$('directorySub').value; saveState(); render(); showToast('Directory links loaded.'); });
+  }
+
+  function bindDashboard(){ }
+
+  function bindFeedback(){
+    $('feedbackForm')?.addEventListener('submit',(e)=>{
+      e.preventDefault();
+      const subject = `[DigiHealth Lab Feedback] ${fieldValue('fbSubject') || fieldValue('fbType')}`;
+      const body = [
+        'Feedback & Suggestions for DigiHealth Lab',
+        '',
+        `Name: ${fieldValue('fbName')}`,
+        `Email: ${fieldValue('fbEmail')}`,
+        `Role: ${fieldValue('fbRole')}`,
+        `Feedback type: ${fieldValue('fbType')}`,
+        `Subject: ${fieldValue('fbSubject')}`,
+        '',
+        'Message:',
+        fieldValue('fbMessage'),
+        '',
+        'Sent from DigiHealth Lab web platform.'
+      ].join('\n');
+      window.location.href = mailto(subject, body);
+      showToast('Opening your email app to send feedback.');
+    });
+  }
+
+  function bindCollaboration(){
+    $('collabForm')?.addEventListener('submit',(e)=>{
+      e.preventDefault();
+      const subject = `[DigiHealth Lab Collaboration] ${fieldValue('coType')} - ${fieldValue('coOrg')}`;
+      const body = [
+        'Collaboration Request for DigiHealth Lab',
+        '',
+        `Name: ${fieldValue('coName')}`,
+        `Email: ${fieldValue('coEmail')}`,
+        `Organization / University / Company: ${fieldValue('coOrg')}`,
+        `Collaboration type: ${fieldValue('coType')}`,
+        `Area of interest: ${fieldValue('coArea')}`,
+        '',
+        'Proposal details:',
+        fieldValue('coMessage'),
+        '',
+        'Sent from DigiHealth Lab web platform.'
+      ].join('\n');
+      window.location.href = mailto(subject, body);
+      showToast('Opening your email app to send the collaboration request.');
+    });
+  }
+
+  function bindLearning(){
+    $('checkTermQuiz')?.addEventListener('click',()=>{
+      const ans=document.querySelector('input[name="termquiz"]:checked');
+      if(!ans) return showToast('Please select an answer.');
+      const ok=ans.value==='right'; state.quiz.terminology=ok?1:0; saveState(); $('termQuizResult').textContent= ok?'Correct. SOB usually means shortness of breath in clinical notes.':'Try again. Review common clinical abbreviations.'; showToast(ok?'Quiz passed':'Answer checked');
+    });
+    $('showPrivacyAnswer')?.addEventListener('click',()=>{$('privacyAnswer').textContent=privacyScenarios[0].a; state.quiz.privacy=1; saveState();});
+    bindResourceLibrary();
+    document.querySelectorAll('[data-resource-area]').forEach(b=>b.addEventListener('click',()=>{
+      const areaMap = {
+        'Medical Terminology':'Medical Terminology',
+        'Medical Coding':'Medical Coding',
+        'Medical Technology':'Digital Health',
+        'Health Technology Laws':'Privacy & Law',
+        'Health Informatics Standards':'Interoperability',
+        'Healthcare Data Analysis':'Data Quality'
+      };
+      const mapped = areaMap[b.dataset.resourceArea] || '';
+      const sel = $('resourceArea');
+      if(sel){ sel.value = mapped; drawResources(); $('officialResources')?.scrollIntoView({behavior:'smooth', block:'start'}); }
+    }));
+  }
+
+  function resourceCard(r){
+    return `<article class="resource-card" data-area="${r.area}"><div class="resource-meta"><span class="pill blue">${r.area}</span><span class="pill gray">${r.type}</span></div><h4>${r.title}</h4><p><strong>${r.org}</strong></p><p>${r.use}</p><a class="resource-link" href="${r.url}" target="_blank" rel="noopener noreferrer">Open official source ↗</a></article>`;
+  }
+  function drawResources(){
+    const box = $('resourceResults'); if(!box) return;
+    const q = ($('resourceSearch')?.value || '').toLowerCase().trim();
+    const area = $('resourceArea')?.value || '';
+    const rows = officialResources.filter(r => (!area || r.area===area) && (!q || [r.area,r.org,r.title,r.type,r.use].join(' ').toLowerCase().includes(q)));
+    box.innerHTML = rows.map(resourceCard).join('') || `<div class="empty">No matching official resources found.</div>`;
+  }
+  function bindResourceLibrary(){
+    drawResources();
+    $('resourceSearch')?.addEventListener('input', drawResources);
+    $('resourceArea')?.addEventListener('change', drawResources);
+    $('resetResources')?.addEventListener('click',()=>{ if($('resourceSearch')) $('resourceSearch').value=''; if($('resourceArea')) $('resourceArea').value=''; drawResources(); });
+  }
+  function bindTerminology(){
+    const results=$('termResults'), input=$('termSearch'), sel=$('termCategory'), stats=$('termStats');
+    const draw=()=>{
+      const category=sel?.value || '';
+      state.termCategory = category;
+      const q=(input?.value||'').toLowerCase().trim();
+      if(!category){
+        if(stats) stats.innerHTML = '<strong>No category selected</strong><small>Please choose one terminology category from the dropdown to view terms.</small>';
+        if(results) results.innerHTML = `<div class="empty">Select a category to display terminology terms.</div>`;
+        saveState(); return;
+      }
+      const rows=terms.filter(t=>(t[4]||'General')===category && (!q || t.join(' ').toLowerCase().includes(q))).sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
+      const visibleRows = rows.slice(0, 500);
+      if(stats) stats.innerHTML = `<strong>${rows.length}</strong> terms in <span>${category}</span><small>${rows.length>500 ? 'Showing first 500 alphabetically for browser speed. Use search to narrow results.' : 'Displayed alphabetically inside the selected category.'}</small>`;
+      if(results){ let last=''; results.innerHTML = visibleRows.map(t=>{ const letter=(String(t[0]||'#').trim()[0]||'#').toUpperCase(); const head=letter!==last?`<div class="alphabet-divider"><span>${letter}</span></div>`:''; last=letter; return `${head}<div class="term-card"><div class="term-head"><div><h4>${t[0]}</h4><small>${t[1]}</small></div><span class="pill blue">${t[4]||'Term'}</span></div><p>${t[2]}</p><p><strong>Where it is used:</strong> ${t[3]}</p></div>`; }).join('') || `<div class="empty">No matching terms found in this category.</div>`; }
+      saveState();
+    };
+    input?.addEventListener('input',draw); sel?.addEventListener('change',()=>{ if(input) input.disabled=!sel.value; if(input) input.value=''; draw(); });
+    $('clearSearch')?.addEventListener('click',()=>{ if(input) input.value=''; if(sel) sel.value=''; state.termCategory=''; saveState(); draw();});
+    draw();
+  }
+  function bindSimulator(){
+    ensureHisState();
+    document.querySelectorAll('[data-step]').forEach(s=>s.addEventListener('click',()=>{state.activeStep=Number(s.dataset.step);saveState();render();}));
+    document.querySelectorAll('[data-outcome]').forEach(btn=>btn.addEventListener('click',()=>{
+      ensureHisState().outcome=btn.dataset.outcome;
+      if(btn.dataset.outcome==='Death') state.patient.status='Expired';
+      if(btn.dataset.outcome==='Transfer') state.patient.status='Transferred';
+      if(btn.dataset.outcome==='Discharge') state.patient.status='Discharged';
+      saveState(); render(); showToast(`Outcome path changed to ${btn.dataset.outcome}.`);
+    }));
+    document.querySelectorAll('[data-save-his]').forEach(btn=>btn.addEventListener('click',()=>{
+      const key=btn.dataset.saveHis; ensureHisState();
+      state.his.stageNotes[key]={a:fieldValue(`${key}_a`) || 'Reviewed', b:fieldValue(`${key}_b`) || 'Saved in simulation'};
+      saveState(); showToast('HIS stage saved.'); render();
+    }));
+    $('hisRoleSelect')?.addEventListener('change',()=>{const h=ensureHisState(); h.selectedRole=$('hisRoleSelect').value; const forms=formsForRole(h.selectedRole); h.selectedForm=forms[0]?.id || 'patient_registration'; saveState(); render(); showToast('Role changed. Forms updated for '+h.selectedRole);});
+    $('hisOutcomeRoute')?.addEventListener('change',()=>{const h=ensureHisState(); h.route=$('hisOutcomeRoute').value; if(h.route.includes('Death')){h.outcome='Death'; state.patient.status='Expired';} else if(h.route.includes('Transfer')){h.outcome='Transfer'; state.patient.status='Transferred';} else {h.outcome='Discharge'; if(state.patient.status==='Expired'||state.patient.status==='Transferred') state.patient.status='Admitted';} saveState(); render(); showToast('Patient route updated.');});
+    document.querySelectorAll('[data-assign-bed]').forEach(btn=>btn.addEventListener('click',()=>{const [ward,bed]=btn.dataset.assignBed.split('|'); state.patient.ward=ward; state.patient.bed=bed; state.patient.status='Assigned bed / waiting nurse acceptance'; const h=ensureHisState(); h.route=ward==='Emergency Observation'?'Emergency observation':'Inpatient ward admission'; saveState(); render(); showToast('Bed assigned: '+ward+' '+bed); }));
+    $('hisFormSelect')?.addEventListener('change',()=>{const h=ensureHisState(); h.selectedForm=$('hisFormSelect').value; saveState(); render();});
+    $('saveMedicalForm')?.addEventListener('click',()=>{const h=ensureHisState(); const form=medicalRecordForms.find(f=>f.id===h.selectedForm); if(!form) return; if(!h.forms) h.forms={}; h.forms[form.id]=h.forms[form.id]||{}; document.querySelectorAll('[data-med-form-field]').forEach(el=>{h.forms[form.id][el.dataset.medFormField]=el.value;}); saveState(); render(); showToast('Medical record form saved for '+(h.selectedRole||'selected role'));});
+    $('completeStep')?.addEventListener('click',()=>{const id=steps[state.activeStep].id; if(!state.completedSteps.includes(id)) state.completedSteps.push(id); if(state.activeStep<steps.length-1) state.activeStep++; saveState(); render(); showToast('Workflow step completed.');});
+    $('newPatient')?.addEventListener('click',()=>{const num=Math.floor(Math.random()*9000+1000); state.patient={...defaultState.patient, patientId:`DH-2026-${num}`, name:'Training Patient '+num, status:'Registered', ward:'-', bed:'-'}; state.completedSteps=['Patient Arrival & Registration']; state.activeStep=0; state.his={outcome:'Discharge', stageNotes:{}, triage:{level:'Urgent', vitals:'BP 128/82, HR 96, Temp 38.4°C, SpO2 94%', priority:'Needs physician review'}, death:{pronouncedBy:'', pronouncedAt:'', immediate:'', intermediate:'', underlying:'', contributing:'', bodyRelease:'Pending'}, transfer:{destination:'', reason:'', referralNote:''}, dischargePlan:{type:'Home discharge', followup:'Clinic follow-up in 1 week', education:'Medication use, warning signs and follow-up instructions provided'}}; saveState(); render(); showToast('New fictional patient created.');});
+    $('resetHisProcess')?.addEventListener('click',()=>{state.completedSteps=['Patient Arrival & Registration']; state.activeStep=0; saveState(); render(); showToast('HIS process reset for this patient.');});
+    $('savePatient')?.addEventListener('click',()=>{['patientId','name','dob','gender','phone','insurance','address','allergy'].forEach(k=>{const el=$('p_'+k); if(el) state.patient[k]=el.value}); if(!state.completedSteps.includes('Patient Arrival & Registration')) state.completedSteps.push('Patient Arrival & Registration'); saveState(); showToast('Registration saved.'); render();});
+    $('saveTriage')?.addEventListener('click',()=>{const h=ensureHisState(); h.triage={level:fieldValue('triageLevel'), vitals:fieldValue('triageVitals'), priority:fieldValue('triagePriority')}; saveState(); showToast('Triage saved.'); render();});
+    $('saveAdmission')?.addEventListener('click',()=>{['category','status','ward','bed'].forEach(k=>{const el=$('p_'+k); if(el) state.patient[k]=el.value}); saveState(); showToast('Admission and bed details saved.'); render();});
+    $('saveNotes')?.addEventListener('click',()=>{['chief','history','diagnosis','treatment'].forEach(k=>{const el=$('n_'+k); if(el) state.notes[k]=el.value}); saveState(); showToast('Clinical documentation saved.');});
+    $('saveDischargePlan')?.addEventListener('click',()=>{const h=ensureHisState(); h.dischargePlan={type:fieldValue('dischargeType'), followup:fieldValue('dischargeFollowup'), education:fieldValue('dischargeEducation')}; saveState(); showToast('Discharge planning saved.'); render();});
+    $('saveDischarge')?.addEventListener('click',()=>{state.notes.discharge=$('n_discharge').value; state.audit['Discharge summary completed']=!!state.notes.discharge.trim(); state.patient.status='Discharged'; ensureHisState().outcome='Discharge'; saveState(); showToast('Discharge summary saved. Patient status set to Discharged.'); render();});
+    $('saveTransfer')?.addEventListener('click',()=>{const h=ensureHisState(); h.outcome='Transfer'; h.transfer={destination:fieldValue('transferDestination'), reason:fieldValue('transferReason'), referralNote:fieldValue('transferNote')}; state.patient.status='Transferred'; state.patient.ward='Referral / Transfer'; state.patient.bed='-'; saveState(); showToast('Transfer outcome saved.'); render();});
+    $('saveDeath')?.addEventListener('click',()=>{const h=ensureHisState(); h.outcome='Death'; h.death={pronouncedBy:fieldValue('deathPronouncedBy'), pronouncedAt:fieldValue('deathPronouncedAt'), immediate:fieldValue('deathImmediate'), intermediate:fieldValue('deathIntermediate'), underlying:fieldValue('deathUnderlying'), contributing:fieldValue('deathContributing'), bodyRelease:fieldValue('deathBodyRelease')}; state.patient.status='Expired'; state.audit['Discharge summary completed']=true; saveState(); showToast('Death documentation saved. Mortality coding path activated.'); render();});
+  }
+
+  function bindCoding(){
+    const selectedArea = state.coding?.area || '';
+    const areaCases = codingCasesByArea(selectedArea);
+    const selectedCaseId = state.coding?.caseId || '';
+    const caseObj = areaCases.find(c=>c.id===selectedCaseId) || null;
+    $('codingAreaSelect')?.addEventListener('change',()=>{ state.coding={area:$('codingAreaSelect').value, caseId:'', result:null, query:''}; saveState(); render(); });
+    $('codingCaseSelect')?.addEventListener('change',()=>{ state.coding={area:selectedArea, caseId:$('codingCaseSelect').value, query:'', result:null, feedback:''}; saveState(); render(); });
+    if(caseObj){
+      const currentPrimary = state.coding?.selectedPrimary || state.coding?.primary || '';
+      if($('c_primary')) $('c_primary').value=currentPrimary;
+      if($('c_action')) $('c_action').value=state.coding?.action || (caseObj.requiresQuery?'query':'finalize');
+      $('showCodingGuide')?.addEventListener('click',()=> $('codingGuide')?.classList.toggle('hidden'));
+      $('resetCodingPractice')?.addEventListener('click',()=>{ state.coding={area:selectedArea, caseId:caseObj.id, query:'', result:null, feedback:''}; saveState(); render(); showToast('Coding practice reset.'); });
+      $('checkCoding')?.addEventListener('click',()=>{
+        const selected = {primary:$('c_primary').value, secondary:selectedValues('secondary'), procedures:selectedValues('procedure'), labs:selectedValues('lab'), medications:selectedValues('medication'), action:$('c_action').value, query:$('c_query').value};
+        const result = evaluateCoding(caseObj, selected);
+        state.coding={area:selectedArea, caseId:caseObj.id, selectedPrimary:selected.primary, selectedSecondaries:selected.secondary, selectedProcedures:selected.procedures, selectedLabs:selected.labs, selectedMedications:selected.medications, action:selected.action, query:selected.query, result, feedback:`${result.status} - ${result.score}%`};
+        state.quiz.coding=result.score>=85?1:0; saveState(); $('codingFeedback').innerHTML=renderCodingResult(result, caseObj); showToast(result.score>=85?'Correct coding practice completed.':'Coding needs review. See explanation.');
+      });
+    }
+    ['codingSystemFilter','codingCategoryFilter'].forEach(id=>$(id)?.addEventListener('change', renderCodingLibrary));
+    $('resetCodingLibrary')?.addEventListener('click',()=>{ if($('codingSystemFilter')) $('codingSystemFilter').value=''; if($('codingCategoryFilter')) $('codingCategoryFilter').value=''; renderCodingLibrary(); });
+  }
+
+  function bindMedicalLibrary(){
+    $('libraryField')?.addEventListener('change', e=>{state.libraryField=e.target.value; state.librarySpecialty='Choose specialty'; state.libraryBook='All books in selected specialty'; state.librarySearched=false; saveState(); render();});
+    $('librarySpecialty')?.addEventListener('change', e=>{state.librarySpecialty=e.target.value; state.libraryBook='All books in selected specialty'; state.librarySearched=false; saveState(); render();});
+    $('libraryBook')?.addEventListener('change', e=>{state.libraryBook=e.target.value; saveState();});
+    $('findLibraryBooks')?.addEventListener('click', ()=>{state.librarySearched=true; saveState(); render();});
+    $('resetLibraryBooks')?.addEventListener('click', ()=>{state.libraryField='Choose main field'; state.librarySpecialty='Choose specialty'; state.libraryBook='All books in selected specialty'; state.librarySearched=false; saveState(); render();});
+  }
+
+  function bindAudit(){
+    document.querySelectorAll('[data-audit]').forEach(ch=>ch.addEventListener('change',()=>{state.audit[ch.dataset.audit]=ch.checked; saveState(); render();}));
+    $('saveAudit')?.addEventListener('click',()=>{saveState(); showToast('Audit progress saved.');});
+    $('copyAuditReport')?.addEventListener('click',()=>navigator.clipboard.writeText($('auditReportText').innerText).then(()=>showToast('Audit report copied.')));
+    $('addDoc')?.addEventListener('click',()=>{const document=$('docName').value.trim(); if(!document) return showToast('Document name is required.'); state.missingDocs.unshift({patientId:state.patient.patientId, document, unit:$('docUnit').value||'Not assigned', status:$('docStatus').value, followUp:$('docDate').value||'Not set'}); saveState(); render(); showToast('Missing document added.');});
+  }
+  function bindTelehealth(){
+    if(!state.telehealth) state.telehealth={checks:{}};
+    const saveTeleForm = () => {
+      state.telehealth = {
+        ...(state.telehealth||{}),
+        visitMode:fieldValue('teleMode'),
+        device:fieldValue('teleDevice'),
+        complaint:fieldValue('teleComplaint'),
+        rpm:fieldValue('teleRpm'),
+        assessment:fieldValue('teleAssessment'),
+        plan:fieldValue('telePlan'),
+        privacy:fieldValue('telePrivacy'),
+        identityNote:fieldValue('teleIdentity'),
+        consentStatus:fieldValue('teleConsent'),
+        vitalsTrend:fieldValue('teleVitalsTrend'),
+        redFlags:fieldValue('teleRedFlags'),
+        limitations:fieldValue('teleLimitations'),
+        followupDate:fieldValue('teleFollowupDate'),
+        patientEducation:fieldValue('teleEducation'),
+        escalationAdvice:fieldValue('teleEscalation'),
+        outcome:fieldValue('teleOutcome'),
+        checks: state.telehealth?.checks || {},
+        stage: state.telehealth?.stage || 'Pre-visit'
+      };
+      if(state.telehealth.identityNote && state.telehealth.identityNote.trim()) state.telehealth.checks.identity=true;
+      if(state.telehealth.consentStatus==='Consent documented') state.telehealth.checks.consent=true;
+      if(state.telehealth.privacy && state.telehealth.privacy.trim()) state.telehealth.checks.privacy=true;
+      if(state.telehealth.rpm && state.telehealth.rpm.trim()) state.telehealth.checks.vitals=true;
+      if(state.telehealth.assessment && state.telehealth.assessment.trim() && state.telehealth.plan && state.telehealth.plan.trim()) state.telehealth.checks.note=true;
+      if(state.telehealth.plan && state.telehealth.plan.trim()) state.telehealth.checks.followup=true;
+    };
+    document.querySelectorAll('[data-tele-stage]').forEach(btn=>btn.addEventListener('click',()=>{ saveTeleForm(); state.telehealth.stage=btn.dataset.teleStage; saveState(); render(); showToast('Telehealth stage opened: '+btn.dataset.teleStage); }));
+    document.querySelectorAll('[data-next-tele-stage]').forEach(btn=>btn.addEventListener('click',()=>{ saveTeleForm(); state.telehealth.stage=btn.dataset.nextTeleStage; saveState(); render(); showToast('Moved to: '+btn.dataset.nextTeleStage); }));
+    document.querySelectorAll('[data-tele-check]').forEach(ch=>ch.addEventListener('change',()=>{ if(!state.telehealth.checks) state.telehealth.checks={}; state.telehealth.checks[ch.dataset.teleCheck]=ch.checked; saveState(); render(); }));
+    $('saveTelehealth')?.addEventListener('click',()=>{
+      saveTeleForm();
+      saveState(); render(); showToast('Telehealth simulation saved and checked.');
+    });
+    $('saveTelehealthFinal')?.addEventListener('click',()=>{
+      saveTeleForm();
+      state.telehealth.stage='Follow-up';
+      saveState(); render(); showToast('Telehealth simulation finalized. Review the visible result below.');
+    });
+    $('copyTeleReport')?.addEventListener('click',()=>navigator.clipboard.writeText($('teleReportText').innerText).then(()=>showToast('Telehealth report copied.')));
+  }
+
+  function bindReports(){
+    $('copyReport')?.addEventListener('click',()=>navigator.clipboard.writeText($('reportText').innerText).then(()=>showToast('Report copied.')));
+    $('printReport')?.addEventListener('click',()=>window.print());
+    $('downloadCertificate')?.addEventListener('click',()=>{
+      const user=getActiveUser() || {name:'Student'};
+      const htmlDoc = `<!doctype html><html><head><meta charset="utf-8"><title>DigiHealth Lab Certificate</title><style>body{font-family:Arial,sans-serif;background:#f0fdfa;padding:40px}.cert{max-width:900px;margin:auto;background:white;border:8px solid #0f766e;border-radius:28px;padding:48px;text-align:center;color:#0f172a}.brand{color:#0f766e;font-weight:bold}.name{font-size:36px;color:#0f766e}.small{color:#475569}</style></head><body><div class="cert"><div class="brand">DigiHealth Lab Academy</div><h1>Certificate of Academic Practice</h1><p>This certificate is awarded to</p><div class="name">${escapeHtml(user.name)}</div><p>for recorded academic practice in DigiHealth Lab learning tools.</p><p class="small">Prepared by Motahhareh Khorshidzadeh • Health IT Specialist | HIS & EMR Systems Consultant • Researcher in Digital Health</p></div></body></html>`;
+      const blob=new Blob([htmlDoc],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='DigiHealth_Lab_Certificate.html'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); showToast('Certificate downloaded.');
+    });
+  }
+
+
+
+  /* User-requested revision: logo cleanup, educational coding-by-classification, professional PDF certificate */
+  const codingEducationalCasesV2 = [{"id": "ccase-001-gastroenteritis", "group": "Infectious and Parasitic Diseases", "title": "Case 1: Acute infectious gastroenteritis", "story": "Fictional training record: patient presents with clinical findings consistent with acute infectious gastroenteritis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Acute infectious gastroenteritis", "secondaryDx": [{"label": "Dehydration", "code": "E86.0"}], "principalDx": {"label": "Acute infectious gastroenteritis", "code": "A09"}, "finalDx": "Acute infectious gastroenteritis", "procedures": [{"label": "IV hydration", "code": "96360"}], "surgeries": [], "medications": [{"label": "Oral rehydration salts", "code": "ATC A07CA"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as A09 because the fictional final provider documentation supports Acute infectious gastroenteritis. The secondary code E86.0 is included because dehydration is documented as clinically relevant. Procedure/service code 96360 is linked to iv hydration. Medication classification ATC A07CA is included for educational drug-code awareness."}, {"id": "ccase-002-sepsis", "group": "Infectious and Parasitic Diseases", "title": "Case 2: Sepsis due to E. coli UTI", "story": "Fictional training record: patient presents with clinical findings consistent with sepsis due to e. coli uti. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Sepsis due to E. coli UTI", "secondaryDx": [{"label": "UTI", "code": "N39.0"}], "principalDx": {"label": "Sepsis due to E. coli UTI", "code": "A41.51"}, "finalDx": "Sepsis due to E. coli UTI", "procedures": [{"label": "Blood culture", "code": "87040"}], "surgeries": [], "medications": [{"label": "Ceftriaxone", "code": "ATC J01DD04"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as A41.51 because the fictional final provider documentation supports Sepsis due to E. coli UTI. The secondary code N39.0 is included because uti is documented as clinically relevant. Procedure/service code 87040 is linked to blood culture. Medication classification ATC J01DD04 is included for educational drug-code awareness."}, {"id": "ccase-003-tb", "group": "Infectious and Parasitic Diseases", "title": "Case 3: Pulmonary tuberculosis", "story": "Fictional training record: patient presents with clinical findings consistent with pulmonary tuberculosis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Pulmonary tuberculosis", "secondaryDx": [{"label": "Hemoptysis", "code": "R04.2"}], "principalDx": {"label": "Pulmonary tuberculosis", "code": "A15.0"}, "finalDx": "Pulmonary tuberculosis", "procedures": [{"label": "Chest X-ray", "code": "71046"}], "surgeries": [], "medications": [{"label": "Rifampicin", "code": "ATC J04AB02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as A15.0 because the fictional final provider documentation supports Pulmonary tuberculosis. The secondary code R04.2 is included because hemoptysis is documented as clinically relevant. Procedure/service code 71046 is linked to chest x-ray. Medication classification ATC J04AB02 is included for educational drug-code awareness."}, {"id": "ccase-004-cellulitis", "group": "Infectious and Parasitic Diseases", "title": "Case 4: Cellulitis of lower limb", "story": "Fictional training record: patient presents with clinical findings consistent with cellulitis of lower limb. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Cellulitis of lower limb", "secondaryDx": [{"label": "Type 2 diabetes", "code": "E11.9"}], "principalDx": {"label": "Cellulitis of lower limb", "code": "L03.119"}, "finalDx": "Cellulitis of lower limb", "procedures": [{"label": "Wound culture", "code": "87070"}], "surgeries": [], "medications": [{"label": "Clindamycin", "code": "ATC J01FF01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as L03.119 because the fictional final provider documentation supports Cellulitis of lower limb. The secondary code E11.9 is included because type 2 diabetes is documented as clinically relevant. Procedure/service code 87070 is linked to wound culture. Medication classification ATC J01FF01 is included for educational drug-code awareness."}, {"id": "ccase-005-dengue", "group": "Infectious and Parasitic Diseases", "title": "Case 5: Dengue fever without warning signs", "story": "Fictional training record: patient presents with clinical findings consistent with dengue fever without warning signs. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Dengue fever without warning signs", "secondaryDx": [{"label": "Thrombocytopenia", "code": "D69.6"}], "principalDx": {"label": "Dengue fever without warning signs", "code": "A90"}, "finalDx": "Dengue fever without warning signs", "procedures": [{"label": "CBC", "code": "85025"}], "surgeries": [], "medications": [{"label": "Acetaminophen", "code": "ATC N02BE01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as A90 because the fictional final provider documentation supports Dengue fever without warning signs. The secondary code D69.6 is included because thrombocytopenia is documented as clinically relevant. Procedure/service code 85025 is linked to cbc. Medication classification ATC N02BE01 is included for educational drug-code awareness."}, {"id": "ccase-006-breast-ca", "group": "Neoplasms", "title": "Case 6: Malignant neoplasm of breast", "story": "Fictional training record: patient presents with clinical findings consistent with malignant neoplasm of breast. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Malignant neoplasm of breast", "secondaryDx": [{"label": "Anemia in neoplastic disease", "code": "D63.0"}], "principalDx": {"label": "Malignant neoplasm of breast", "code": "C50.919"}, "finalDx": "Malignant neoplasm of breast", "procedures": [{"label": "Biopsy pathology review", "code": "88305"}], "surgeries": [{"label": "Lumpectomy", "code": "19301"}], "medications": [{"label": "Tamoxifen", "code": "ATC L02BA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as C50.919 because the fictional final provider documentation supports Malignant neoplasm of breast. The secondary code D63.0 is included because anemia in neoplastic disease is documented as clinically relevant. Procedure/service code 88305 is linked to biopsy pathology review. Medication classification ATC L02BA01 is included for educational drug-code awareness."}, {"id": "ccase-007-colon-ca", "group": "Neoplasms", "title": "Case 7: Malignant neoplasm of colon", "story": "Fictional training record: patient presents with clinical findings consistent with malignant neoplasm of colon. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Malignant neoplasm of colon", "secondaryDx": [{"label": "Iron deficiency anemia", "code": "D50.9"}], "principalDx": {"label": "Malignant neoplasm of colon", "code": "C18.9"}, "finalDx": "Malignant neoplasm of colon", "procedures": [{"label": "Colonoscopy biopsy", "code": "45380"}], "surgeries": [{"label": "Colectomy", "code": "44140"}], "medications": [{"label": "Oxaliplatin", "code": "ATC L01XA03"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as C18.9 because the fictional final provider documentation supports Malignant neoplasm of colon. The secondary code D50.9 is included because iron deficiency anemia is documented as clinically relevant. Procedure/service code 45380 is linked to colonoscopy biopsy. Medication classification ATC L01XA03 is included for educational drug-code awareness."}, {"id": "ccase-008-lung-ca", "group": "Neoplasms", "title": "Case 8: Malignant neoplasm of bronchus or lung", "story": "Fictional training record: patient presents with clinical findings consistent with malignant neoplasm of bronchus or lung. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Malignant neoplasm of bronchus or lung", "secondaryDx": [{"label": "Pleural effusion", "code": "J90"}], "principalDx": {"label": "Malignant neoplasm of bronchus or lung", "code": "C34.90"}, "finalDx": "Malignant neoplasm of bronchus or lung", "procedures": [{"label": "CT chest", "code": "71260"}], "surgeries": [{"label": "Bronchoscopy", "code": "31622"}], "medications": [{"label": "Cisplatin", "code": "ATC L01XA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as C34.90 because the fictional final provider documentation supports Malignant neoplasm of bronchus or lung. The secondary code J90 is included because pleural effusion is documented as clinically relevant. Procedure/service code 71260 is linked to ct chest. Medication classification ATC L01XA01 is included for educational drug-code awareness."}, {"id": "ccase-009-prostate-ca", "group": "Neoplasms", "title": "Case 9: Malignant neoplasm of prostate", "story": "Fictional training record: patient presents with clinical findings consistent with malignant neoplasm of prostate. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Malignant neoplasm of prostate", "secondaryDx": [{"label": "Urinary retention", "code": "R33.9"}], "principalDx": {"label": "Malignant neoplasm of prostate", "code": "C61"}, "finalDx": "Malignant neoplasm of prostate", "procedures": [{"label": "PSA test", "code": "84153"}], "surgeries": [{"label": "Prostate biopsy", "code": "55700"}], "medications": [{"label": "Leuprolide", "code": "ATC L02AE02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as C61 because the fictional final provider documentation supports Malignant neoplasm of prostate. The secondary code R33.9 is included because urinary retention is documented as clinically relevant. Procedure/service code 84153 is linked to psa test. Medication classification ATC L02AE02 is included for educational drug-code awareness."}, {"id": "ccase-010-thyroid-nodule", "group": "Neoplasms", "title": "Case 10: Thyroid neoplasm, uncertain behavior", "story": "Fictional training record: patient presents with clinical findings consistent with thyroid neoplasm, uncertain behavior. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Thyroid neoplasm", "secondaryDx": [{"label": "Dysphagia", "code": "R13.10"}], "principalDx": {"label": "Thyroid neoplasm, uncertain behavior", "code": "D44.0"}, "finalDx": "Thyroid neoplasm, uncertain behavior", "procedures": [{"label": "Ultrasound neck", "code": "76536"}], "surgeries": [{"label": "Thyroidectomy", "code": "60240"}], "medications": [{"label": "Levothyroxine", "code": "ATC H03AA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as D44.0 because the fictional final provider documentation supports Thyroid neoplasm, uncertain behavior. The secondary code R13.10 is included because dysphagia is documented as clinically relevant. Procedure/service code 76536 is linked to ultrasound neck. Medication classification ATC H03AA01 is included for educational drug-code awareness."}, {"id": "ccase-011-dm2", "group": "Endocrine, Nutritional and Metabolic Diseases", "title": "Case 11: Type 2 diabetes mellitus with hyperglycemia", "story": "Fictional training record: patient presents with clinical findings consistent with type 2 diabetes mellitus with hyperglycemia. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Type 2 diabetes mellitus with hyperglycemia", "secondaryDx": [{"label": "Obesity", "code": "E66.9"}], "principalDx": {"label": "Type 2 diabetes mellitus with hyperglycemia", "code": "E11.65"}, "finalDx": "Type 2 diabetes mellitus with hyperglycemia", "procedures": [{"label": "HbA1c", "code": "83036"}], "surgeries": [], "medications": [{"label": "Metformin", "code": "ATC A10BA02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as E11.65 because the fictional final provider documentation supports Type 2 diabetes mellitus with hyperglycemia. The secondary code E66.9 is included because obesity is documented as clinically relevant. Procedure/service code 83036 is linked to hba1c. Medication classification ATC A10BA02 is included for educational drug-code awareness."}, {"id": "ccase-012-dka", "group": "Endocrine, Nutritional and Metabolic Diseases", "title": "Case 12: Diabetic ketoacidosis", "story": "Fictional training record: patient presents with clinical findings consistent with diabetic ketoacidosis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Diabetic ketoacidosis", "secondaryDx": [{"label": "Dehydration", "code": "E86.0"}], "principalDx": {"label": "Diabetic ketoacidosis", "code": "E11.10"}, "finalDx": "Diabetic ketoacidosis", "procedures": [{"label": "Basic metabolic panel", "code": "80048"}], "surgeries": [], "medications": [{"label": "Regular insulin", "code": "ATC A10AB01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as E11.10 because the fictional final provider documentation supports Diabetic ketoacidosis. The secondary code E86.0 is included because dehydration is documented as clinically relevant. Procedure/service code 80048 is linked to basic metabolic panel. Medication classification ATC A10AB01 is included for educational drug-code awareness."}, {"id": "ccase-013-hypothyroid", "group": "Endocrine, Nutritional and Metabolic Diseases", "title": "Case 13: Hypothyroidism", "story": "Fictional training record: patient presents with clinical findings consistent with hypothyroidism. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Hypothyroidism", "secondaryDx": [{"label": "Fatigue", "code": "R53.83"}], "principalDx": {"label": "Hypothyroidism", "code": "E03.9"}, "finalDx": "Hypothyroidism", "procedures": [{"label": "TSH", "code": "84443"}], "surgeries": [], "medications": [{"label": "Levothyroxine", "code": "ATC H03AA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as E03.9 because the fictional final provider documentation supports Hypothyroidism. The secondary code R53.83 is included because fatigue is documented as clinically relevant. Procedure/service code 84443 is linked to tsh. Medication classification ATC H03AA01 is included for educational drug-code awareness."}, {"id": "ccase-014-hyperlipidemia", "group": "Endocrine, Nutritional and Metabolic Diseases", "title": "Case 14: Mixed hyperlipidemia", "story": "Fictional training record: patient presents with clinical findings consistent with mixed hyperlipidemia. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Mixed hyperlipidemia", "secondaryDx": [{"label": "Hypertension", "code": "I10"}], "principalDx": {"label": "Mixed hyperlipidemia", "code": "E78.2"}, "finalDx": "Mixed hyperlipidemia", "procedures": [{"label": "Lipid panel", "code": "80061"}], "surgeries": [], "medications": [{"label": "Atorvastatin", "code": "ATC C10AA05"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as E78.2 because the fictional final provider documentation supports Mixed hyperlipidemia. The secondary code I10 is included because hypertension is documented as clinically relevant. Procedure/service code 80061 is linked to lipid panel. Medication classification ATC C10AA05 is included for educational drug-code awareness."}, {"id": "ccase-015-malnutrition", "group": "Endocrine, Nutritional and Metabolic Diseases", "title": "Case 15: Protein-calorie malnutrition", "story": "Fictional training record: patient presents with clinical findings consistent with protein-calorie malnutrition. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Protein-calorie malnutrition", "secondaryDx": [{"label": "Weight loss", "code": "R63.4"}], "principalDx": {"label": "Protein-calorie malnutrition", "code": "E46"}, "finalDx": "Protein-calorie malnutrition", "procedures": [{"label": "Nutrition assessment", "code": "97802"}], "surgeries": [], "medications": [{"label": "Enteral nutrition", "code": "HCPCS B4150"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as E46 because the fictional final provider documentation supports Protein-calorie malnutrition. The secondary code R63.4 is included because weight loss is documented as clinically relevant. Procedure/service code 97802 is linked to nutrition assessment. Medication classification HCPCS B4150 is included for educational drug-code awareness."}, {"id": "ccase-016-depression", "group": "Mental and Behavioral Disorders", "title": "Case 16: Major depressive disorder, single episode", "story": "Fictional training record: patient presents with clinical findings consistent with major depressive disorder, single episode. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Major depressive disorder", "secondaryDx": [{"label": "Insomnia", "code": "G47.00"}], "principalDx": {"label": "Major depressive disorder, single episode", "code": "F32.9"}, "finalDx": "Major depressive disorder, single episode", "procedures": [{"label": "Mental health evaluation", "code": "90791"}], "surgeries": [], "medications": [{"label": "Sertraline", "code": "ATC N06AB06"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as F32.9 because the fictional final provider documentation supports Major depressive disorder, single episode. The secondary code G47.00 is included because insomnia is documented as clinically relevant. Procedure/service code 90791 is linked to mental health evaluation. Medication classification ATC N06AB06 is included for educational drug-code awareness."}, {"id": "ccase-017-anxiety", "group": "Mental and Behavioral Disorders", "title": "Case 17: Generalized anxiety disorder", "story": "Fictional training record: patient presents with clinical findings consistent with generalized anxiety disorder. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Generalized anxiety disorder", "secondaryDx": [{"label": "Palpitations", "code": "R00.2"}], "principalDx": {"label": "Generalized anxiety disorder", "code": "F41.1"}, "finalDx": "Generalized anxiety disorder", "procedures": [{"label": "Psychotherapy", "code": "90834"}], "surgeries": [], "medications": [{"label": "Escitalopram", "code": "ATC N06AB10"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as F41.1 because the fictional final provider documentation supports Generalized anxiety disorder. The secondary code R00.2 is included because palpitations is documented as clinically relevant. Procedure/service code 90834 is linked to psychotherapy. Medication classification ATC N06AB10 is included for educational drug-code awareness."}, {"id": "ccase-018-substance", "group": "Mental and Behavioral Disorders", "title": "Case 18: Alcohol dependence with withdrawal", "story": "Fictional training record: patient presents with clinical findings consistent with alcohol dependence with withdrawal. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Alcohol dependence with withdrawal", "secondaryDx": [{"label": "Tremor", "code": "R25.1"}], "principalDx": {"label": "Alcohol dependence with withdrawal", "code": "F10.239"}, "finalDx": "Alcohol dependence with withdrawal", "procedures": [{"label": "Detox monitoring", "code": "H0014"}], "surgeries": [], "medications": [{"label": "Thiamine", "code": "ATC A11DA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as F10.239 because the fictional final provider documentation supports Alcohol dependence with withdrawal. The secondary code R25.1 is included because tremor is documented as clinically relevant. Procedure/service code H0014 is linked to detox monitoring. Medication classification ATC A11DA01 is included for educational drug-code awareness."}, {"id": "ccase-019-dementia", "group": "Mental and Behavioral Disorders", "title": "Case 19: Unspecified dementia", "story": "Fictional training record: patient presents with clinical findings consistent with unspecified dementia. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Unspecified dementia", "secondaryDx": [{"label": "Wandering", "code": "Z91.83"}], "principalDx": {"label": "Unspecified dementia", "code": "F03.90"}, "finalDx": "Unspecified dementia", "procedures": [{"label": "Cognitive assessment", "code": "96132"}], "surgeries": [], "medications": [{"label": "Donepezil", "code": "ATC N06DA02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as F03.90 because the fictional final provider documentation supports Unspecified dementia. The secondary code Z91.83 is included because wandering is documented as clinically relevant. Procedure/service code 96132 is linked to cognitive assessment. Medication classification ATC N06DA02 is included for educational drug-code awareness."}, {"id": "ccase-020-bipolar", "group": "Mental and Behavioral Disorders", "title": "Case 20: Bipolar disorder, current episode manic", "story": "Fictional training record: patient presents with clinical findings consistent with bipolar disorder, current episode manic. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Bipolar disorder", "secondaryDx": [{"label": "Medication nonadherence", "code": "Z91.148"}], "principalDx": {"label": "Bipolar disorder, current episode manic", "code": "F31.9"}, "finalDx": "Bipolar disorder, current episode manic", "procedures": [{"label": "Psychiatric follow-up", "code": "90837"}], "surgeries": [], "medications": [{"label": "Lithium", "code": "ATC N05AN01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as F31.9 because the fictional final provider documentation supports Bipolar disorder, current episode manic. The secondary code Z91.148 is included because medication nonadherence is documented as clinically relevant. Procedure/service code 90837 is linked to psychiatric follow-up. Medication classification ATC N05AN01 is included for educational drug-code awareness."}, {"id": "ccase-021-stroke", "group": "Diseases of the Nervous System", "title": "Case 21: Cerebral infarction", "story": "Fictional training record: patient presents with clinical findings consistent with cerebral infarction. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Cerebral infarction", "secondaryDx": [{"label": "Aphasia", "code": "R47.01"}], "principalDx": {"label": "Cerebral infarction", "code": "I63.9"}, "finalDx": "Cerebral infarction", "procedures": [{"label": "CT head", "code": "70450"}], "surgeries": [], "medications": [{"label": "Aspirin", "code": "ATC B01AC06"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as I63.9 because the fictional final provider documentation supports Cerebral infarction. The secondary code R47.01 is included because aphasia is documented as clinically relevant. Procedure/service code 70450 is linked to ct head. Medication classification ATC B01AC06 is included for educational drug-code awareness."}, {"id": "ccase-022-seizure", "group": "Diseases of the Nervous System", "title": "Case 22: Epileptic seizure", "story": "Fictional training record: patient presents with clinical findings consistent with epileptic seizure. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Epileptic seizure", "secondaryDx": [{"label": "Head injury history", "code": "Z87.820"}], "principalDx": {"label": "Epileptic seizure", "code": "G40.909"}, "finalDx": "Epileptic seizure", "procedures": [{"label": "EEG", "code": "95816"}], "surgeries": [], "medications": [{"label": "Levetiracetam", "code": "ATC N03AX14"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as G40.909 because the fictional final provider documentation supports Epileptic seizure. The secondary code Z87.820 is included because head injury history is documented as clinically relevant. Procedure/service code 95816 is linked to eeg. Medication classification ATC N03AX14 is included for educational drug-code awareness."}, {"id": "ccase-023-migraine", "group": "Diseases of the Nervous System", "title": "Case 23: Migraine without aura", "story": "Fictional training record: patient presents with clinical findings consistent with migraine without aura. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Migraine without aura", "secondaryDx": [{"label": "Nausea", "code": "R11.0"}], "principalDx": {"label": "Migraine without aura", "code": "G43.009"}, "finalDx": "Migraine without aura", "procedures": [{"label": "Neurology visit", "code": "99214"}], "surgeries": [], "medications": [{"label": "Sumatriptan", "code": "ATC N02CC01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as G43.009 because the fictional final provider documentation supports Migraine without aura. The secondary code R11.0 is included because nausea is documented as clinically relevant. Procedure/service code 99214 is linked to neurology visit. Medication classification ATC N02CC01 is included for educational drug-code awareness."}, {"id": "ccase-024-parkinson", "group": "Diseases of the Nervous System", "title": "Case 24: Parkinson disease", "story": "Fictional training record: patient presents with clinical findings consistent with parkinson disease. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Parkinson disease", "secondaryDx": [{"label": "Gait abnormality", "code": "R26.9"}], "principalDx": {"label": "Parkinson disease", "code": "G20"}, "finalDx": "Parkinson disease", "procedures": [{"label": "Physical therapy eval", "code": "97161"}], "surgeries": [], "medications": [{"label": "Levodopa/carbidopa", "code": "ATC N04BA02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as G20 because the fictional final provider documentation supports Parkinson disease. The secondary code R26.9 is included because gait abnormality is documented as clinically relevant. Procedure/service code 97161 is linked to physical therapy eval. Medication classification ATC N04BA02 is included for educational drug-code awareness."}, {"id": "ccase-025-neuropathy", "group": "Diseases of the Nervous System", "title": "Case 25: Diabetic neuropathy", "story": "Fictional training record: patient presents with clinical findings consistent with diabetic neuropathy. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Diabetic neuropathy", "secondaryDx": [{"label": "Type 2 diabetes", "code": "E11.9"}], "principalDx": {"label": "Diabetic neuropathy", "code": "E11.40"}, "finalDx": "Diabetic neuropathy", "procedures": [{"label": "Nerve conduction study", "code": "95911"}], "surgeries": [], "medications": [{"label": "Gabapentin", "code": "ATC N03AX12"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as E11.40 because the fictional final provider documentation supports Diabetic neuropathy. The secondary code E11.9 is included because type 2 diabetes is documented as clinically relevant. Procedure/service code 95911 is linked to nerve conduction study. Medication classification ATC N03AX12 is included for educational drug-code awareness."}, {"id": "ccase-026-cataract", "group": "Diseases of the Eye and Ear", "title": "Case 26: Age-related cataract", "story": "Fictional training record: patient presents with clinical findings consistent with age-related cataract. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Age-related cataract", "secondaryDx": [{"label": "Blurred vision", "code": "H53.8"}], "principalDx": {"label": "Age-related cataract", "code": "H25.9"}, "finalDx": "Age-related cataract", "procedures": [{"label": "Eye exam", "code": "92014"}], "surgeries": [{"label": "Cataract extraction", "code": "66984"}], "medications": [{"label": "Prednisolone eye drops", "code": "ATC S01BA04"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as H25.9 because the fictional final provider documentation supports Age-related cataract. The secondary code H53.8 is included because blurred vision is documented as clinically relevant. Procedure/service code 92014 is linked to eye exam. Medication classification ATC S01BA04 is included for educational drug-code awareness."}, {"id": "ccase-027-otitis", "group": "Diseases of the Eye and Ear", "title": "Case 27: Acute otitis media", "story": "Fictional training record: patient presents with clinical findings consistent with acute otitis media. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Acute otitis media", "secondaryDx": [{"label": "Ear pain", "code": "H92.09"}], "principalDx": {"label": "Acute otitis media", "code": "H66.90"}, "finalDx": "Acute otitis media", "procedures": [{"label": "Otoscopy", "code": "92504"}], "surgeries": [], "medications": [{"label": "Amoxicillin", "code": "ATC J01CA04"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as H66.90 because the fictional final provider documentation supports Acute otitis media. The secondary code H92.09 is included because ear pain is documented as clinically relevant. Procedure/service code 92504 is linked to otoscopy. Medication classification ATC J01CA04 is included for educational drug-code awareness."}, {"id": "ccase-028-glaucoma", "group": "Diseases of the Eye and Ear", "title": "Case 28: Primary open-angle glaucoma", "story": "Fictional training record: patient presents with clinical findings consistent with primary open-angle glaucoma. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Primary open-angle glaucoma", "secondaryDx": [{"label": "High intraocular pressure", "code": "H40.059"}], "principalDx": {"label": "Primary open-angle glaucoma", "code": "H40.11X0"}, "finalDx": "Primary open-angle glaucoma", "procedures": [{"label": "Visual field test", "code": "92083"}], "surgeries": [], "medications": [{"label": "Latanoprost", "code": "ATC S01EE01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as H40.11X0 because the fictional final provider documentation supports Primary open-angle glaucoma. The secondary code H40.059 is included because high intraocular pressure is documented as clinically relevant. Procedure/service code 92083 is linked to visual field test. Medication classification ATC S01EE01 is included for educational drug-code awareness."}, {"id": "ccase-029-retinopathy", "group": "Diseases of the Eye and Ear", "title": "Case 29: Diabetic retinopathy", "story": "Fictional training record: patient presents with clinical findings consistent with diabetic retinopathy. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Diabetic retinopathy", "secondaryDx": [{"label": "Type 2 diabetes", "code": "E11.9"}], "principalDx": {"label": "Diabetic retinopathy", "code": "E11.319"}, "finalDx": "Diabetic retinopathy", "procedures": [{"label": "Retinal photography", "code": "92250"}], "surgeries": [], "medications": [{"label": "Anti-VEGF injection", "code": "CPT 67028"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as E11.319 because the fictional final provider documentation supports Diabetic retinopathy. The secondary code E11.9 is included because type 2 diabetes is documented as clinically relevant. Procedure/service code 92250 is linked to retinal photography. Medication classification CPT 67028 is included for educational drug-code awareness."}, {"id": "ccase-030-hearing", "group": "Diseases of the Eye and Ear", "title": "Case 30: Sensorineural hearing loss", "story": "Fictional training record: patient presents with clinical findings consistent with sensorineural hearing loss. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Sensorineural hearing loss", "secondaryDx": [{"label": "Tinnitus", "code": "H93.19"}], "principalDx": {"label": "Sensorineural hearing loss", "code": "H90.5"}, "finalDx": "Sensorineural hearing loss", "procedures": [{"label": "Audiometry", "code": "92557"}], "surgeries": [], "medications": [{"label": "Hearing aid assessment", "code": "V5010"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as H90.5 because the fictional final provider documentation supports Sensorineural hearing loss. The secondary code H93.19 is included because tinnitus is documented as clinically relevant. Procedure/service code 92557 is linked to audiometry. Medication classification V5010 is included for educational drug-code awareness."}, {"id": "ccase-031-ami", "group": "Circulatory System", "title": "Case 31: NSTEMI myocardial infarction", "story": "Fictional training record: patient presents with clinical findings consistent with nstemi myocardial infarction. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "NSTEMI myocardial infarction", "secondaryDx": [{"label": "Hypertension", "code": "I10"}], "principalDx": {"label": "NSTEMI myocardial infarction", "code": "I21.4"}, "finalDx": "NSTEMI myocardial infarction", "procedures": [{"label": "ECG", "code": "93000"}], "surgeries": [{"label": "Coronary angiography", "code": "93454"}], "medications": [{"label": "Aspirin", "code": "ATC B01AC06"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as I21.4 because the fictional final provider documentation supports NSTEMI myocardial infarction. The secondary code I10 is included because hypertension is documented as clinically relevant. Procedure/service code 93000 is linked to ecg. Medication classification ATC B01AC06 is included for educational drug-code awareness."}, {"id": "ccase-032-heart-failure", "group": "Circulatory System", "title": "Case 32: Congestive heart failure", "story": "Fictional training record: patient presents with clinical findings consistent with congestive heart failure. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Congestive heart failure", "secondaryDx": [{"label": "Chronic kidney disease", "code": "N18.9"}], "principalDx": {"label": "Congestive heart failure", "code": "I50.9"}, "finalDx": "Congestive heart failure", "procedures": [{"label": "Echocardiography", "code": "93306"}], "surgeries": [], "medications": [{"label": "Furosemide", "code": "ATC C03CA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as I50.9 because the fictional final provider documentation supports Congestive heart failure. The secondary code N18.9 is included because chronic kidney disease is documented as clinically relevant. Procedure/service code 93306 is linked to echocardiography. Medication classification ATC C03CA01 is included for educational drug-code awareness."}, {"id": "ccase-033-afib", "group": "Circulatory System", "title": "Case 33: Atrial fibrillation", "story": "Fictional training record: patient presents with clinical findings consistent with atrial fibrillation. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Atrial fibrillation", "secondaryDx": [{"label": "Long-term anticoagulant use", "code": "Z79.01"}], "principalDx": {"label": "Atrial fibrillation", "code": "I48.91"}, "finalDx": "Atrial fibrillation", "procedures": [{"label": "ECG", "code": "93000"}], "surgeries": [{"label": "Cardioversion", "code": "92960"}], "medications": [{"label": "Apixaban", "code": "ATC B01AF02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as I48.91 because the fictional final provider documentation supports Atrial fibrillation. The secondary code Z79.01 is included because long-term anticoagulant use is documented as clinically relevant. Procedure/service code 93000 is linked to ecg. Medication classification ATC B01AF02 is included for educational drug-code awareness."}, {"id": "ccase-034-hypertension", "group": "Circulatory System", "title": "Case 34: Essential hypertension", "story": "Fictional training record: patient presents with clinical findings consistent with essential hypertension. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Essential hypertension", "secondaryDx": [{"label": "Headache", "code": "R51.9"}], "principalDx": {"label": "Essential hypertension", "code": "I10"}, "finalDx": "Essential hypertension", "procedures": [{"label": "Blood pressure monitoring", "code": "93784"}], "surgeries": [], "medications": [{"label": "Amlodipine", "code": "ATC C08CA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as I10 because the fictional final provider documentation supports Essential hypertension. The secondary code R51.9 is included because headache is documented as clinically relevant. Procedure/service code 93784 is linked to blood pressure monitoring. Medication classification ATC C08CA01 is included for educational drug-code awareness."}, {"id": "ccase-035-dvt", "group": "Circulatory System", "title": "Case 35: Deep vein thrombosis", "story": "Fictional training record: patient presents with clinical findings consistent with deep vein thrombosis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Deep vein thrombosis", "secondaryDx": [{"label": "Leg swelling", "code": "R60.0"}], "principalDx": {"label": "Deep vein thrombosis", "code": "I82.409"}, "finalDx": "Deep vein thrombosis", "procedures": [{"label": "Venous ultrasound", "code": "93970"}], "surgeries": [], "medications": [{"label": "Enoxaparin", "code": "ATC B01AB05"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as I82.409 because the fictional final provider documentation supports Deep vein thrombosis. The secondary code R60.0 is included because leg swelling is documented as clinically relevant. Procedure/service code 93970 is linked to venous ultrasound. Medication classification ATC B01AB05 is included for educational drug-code awareness."}, {"id": "ccase-036-pneumonia", "group": "Respiratory System", "title": "Case 36: Community acquired pneumonia", "story": "Fictional training record: patient presents with clinical findings consistent with community acquired pneumonia. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Community acquired pneumonia", "secondaryDx": [{"label": "Acute hypoxemia", "code": "R09.02"}], "principalDx": {"label": "Community acquired pneumonia", "code": "J18.9"}, "finalDx": "Community acquired pneumonia", "procedures": [{"label": "Chest X-ray", "code": "71046"}], "surgeries": [], "medications": [{"label": "Azithromycin", "code": "ATC J01FA10"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as J18.9 because the fictional final provider documentation supports Community acquired pneumonia. The secondary code R09.02 is included because acute hypoxemia is documented as clinically relevant. Procedure/service code 71046 is linked to chest x-ray. Medication classification ATC J01FA10 is included for educational drug-code awareness."}, {"id": "ccase-037-copd", "group": "Respiratory System", "title": "Case 37: COPD exacerbation", "story": "Fictional training record: patient presents with clinical findings consistent with copd exacerbation. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "COPD exacerbation", "secondaryDx": [{"label": "Tobacco use", "code": "Z72.0"}], "principalDx": {"label": "COPD exacerbation", "code": "J44.1"}, "finalDx": "COPD exacerbation", "procedures": [{"label": "Spirometry", "code": "94010"}], "surgeries": [], "medications": [{"label": "Salbutamol", "code": "ATC R03AC02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as J44.1 because the fictional final provider documentation supports COPD exacerbation. The secondary code Z72.0 is included because tobacco use is documented as clinically relevant. Procedure/service code 94010 is linked to spirometry. Medication classification ATC R03AC02 is included for educational drug-code awareness."}, {"id": "ccase-038-asthma", "group": "Respiratory System", "title": "Case 38: Asthma exacerbation", "story": "Fictional training record: patient presents with clinical findings consistent with asthma exacerbation. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Asthma exacerbation", "secondaryDx": [{"label": "Wheezing", "code": "R06.2"}], "principalDx": {"label": "Asthma exacerbation", "code": "J45.901"}, "finalDx": "Asthma exacerbation", "procedures": [{"label": "Peak flow measurement", "code": "94150"}], "surgeries": [], "medications": [{"label": "Budesonide", "code": "ATC R03BA02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as J45.901 because the fictional final provider documentation supports Asthma exacerbation. The secondary code R06.2 is included because wheezing is documented as clinically relevant. Procedure/service code 94150 is linked to peak flow measurement. Medication classification ATC R03BA02 is included for educational drug-code awareness."}, {"id": "ccase-039-resp-failure", "group": "Respiratory System", "title": "Case 39: Acute respiratory failure", "story": "Fictional training record: patient presents with clinical findings consistent with acute respiratory failure. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Acute respiratory failure", "secondaryDx": [{"label": "Pneumonia", "code": "J18.9"}], "principalDx": {"label": "Acute respiratory failure", "code": "J96.00"}, "finalDx": "Acute respiratory failure", "procedures": [{"label": "Arterial blood gas", "code": "82803"}], "surgeries": [{"label": "Intubation", "code": "31500"}], "medications": [{"label": "Oxygen therapy", "code": "HCPCS E0424"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as J96.00 because the fictional final provider documentation supports Acute respiratory failure. The secondary code J18.9 is included because pneumonia is documented as clinically relevant. Procedure/service code 82803 is linked to arterial blood gas. Medication classification HCPCS E0424 is included for educational drug-code awareness."}, {"id": "ccase-040-sleep-apnea", "group": "Respiratory System", "title": "Case 40: Obstructive sleep apnea", "story": "Fictional training record: patient presents with clinical findings consistent with obstructive sleep apnea. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Obstructive sleep apnea", "secondaryDx": [{"label": "Obesity", "code": "E66.9"}], "principalDx": {"label": "Obstructive sleep apnea", "code": "G47.33"}, "finalDx": "Obstructive sleep apnea", "procedures": [{"label": "Sleep study", "code": "95810"}], "surgeries": [], "medications": [{"label": "CPAP device", "code": "HCPCS E0601"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as G47.33 because the fictional final provider documentation supports Obstructive sleep apnea. The secondary code E66.9 is included because obesity is documented as clinically relevant. Procedure/service code 95810 is linked to sleep study. Medication classification HCPCS E0601 is included for educational drug-code awareness."}, {"id": "ccase-041-appendicitis", "group": "Digestive System", "title": "Case 41: Acute appendicitis", "story": "Fictional training record: patient presents with clinical findings consistent with acute appendicitis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Acute appendicitis", "secondaryDx": [{"label": "Right lower quadrant pain", "code": "R10.31"}], "principalDx": {"label": "Acute appendicitis", "code": "K35.80"}, "finalDx": "Acute appendicitis", "procedures": [{"label": "CT abdomen", "code": "74177"}], "surgeries": [{"label": "Appendectomy", "code": "44970"}], "medications": [{"label": "Ceftriaxone", "code": "ATC J01DD04"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as K35.80 because the fictional final provider documentation supports Acute appendicitis. The secondary code R10.31 is included because right lower quadrant pain is documented as clinically relevant. Procedure/service code 74177 is linked to ct abdomen. Medication classification ATC J01DD04 is included for educational drug-code awareness."}, {"id": "ccase-042-gi-bleed", "group": "Digestive System", "title": "Case 42: Gastrointestinal hemorrhage", "story": "Fictional training record: patient presents with clinical findings consistent with gastrointestinal hemorrhage. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Gastrointestinal hemorrhage", "secondaryDx": [{"label": "Anemia", "code": "D64.9"}], "principalDx": {"label": "Gastrointestinal hemorrhage", "code": "K92.2"}, "finalDx": "Gastrointestinal hemorrhage", "procedures": [{"label": "Upper endoscopy", "code": "43235"}], "surgeries": [{"label": "Endoscopic control bleeding", "code": "43255"}], "medications": [{"label": "Pantoprazole", "code": "ATC A02BC02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as K92.2 because the fictional final provider documentation supports Gastrointestinal hemorrhage. The secondary code D64.9 is included because anemia is documented as clinically relevant. Procedure/service code 43235 is linked to upper endoscopy. Medication classification ATC A02BC02 is included for educational drug-code awareness."}, {"id": "ccase-043-cholecystitis", "group": "Digestive System", "title": "Case 43: Acute cholecystitis", "story": "Fictional training record: patient presents with clinical findings consistent with acute cholecystitis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Acute cholecystitis", "secondaryDx": [{"label": "Gallstones", "code": "K80.20"}], "principalDx": {"label": "Acute cholecystitis", "code": "K81.0"}, "finalDx": "Acute cholecystitis", "procedures": [{"label": "Ultrasound abdomen", "code": "76705"}], "surgeries": [{"label": "Cholecystectomy", "code": "47562"}], "medications": [{"label": "Piperacillin/tazobactam", "code": "ATC J01CR05"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as K81.0 because the fictional final provider documentation supports Acute cholecystitis. The secondary code K80.20 is included because gallstones is documented as clinically relevant. Procedure/service code 76705 is linked to ultrasound abdomen. Medication classification ATC J01CR05 is included for educational drug-code awareness."}, {"id": "ccase-044-pancreatitis", "group": "Digestive System", "title": "Case 44: Acute pancreatitis", "story": "Fictional training record: patient presents with clinical findings consistent with acute pancreatitis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Acute pancreatitis", "secondaryDx": [{"label": "Alcohol use", "code": "Z72.89"}], "principalDx": {"label": "Acute pancreatitis", "code": "K85.90"}, "finalDx": "Acute pancreatitis", "procedures": [{"label": "Serum lipase", "code": "83690"}], "surgeries": [], "medications": [{"label": "IV fluids", "code": "CPT 96360"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as K85.90 because the fictional final provider documentation supports Acute pancreatitis. The secondary code Z72.89 is included because alcohol use is documented as clinically relevant. Procedure/service code 83690 is linked to serum lipase. Medication classification CPT 96360 is included for educational drug-code awareness."}, {"id": "ccase-045-gerd", "group": "Digestive System", "title": "Case 45: Gastro-esophageal reflux disease", "story": "Fictional training record: patient presents with clinical findings consistent with gastro-esophageal reflux disease. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Gastro-esophageal reflux disease", "secondaryDx": [{"label": "Chest discomfort", "code": "R07.89"}], "principalDx": {"label": "Gastro-esophageal reflux disease", "code": "K21.9"}, "finalDx": "Gastro-esophageal reflux disease", "procedures": [{"label": "Esophagoscopy", "code": "43200"}], "surgeries": [], "medications": [{"label": "Omeprazole", "code": "ATC A02BC01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as K21.9 because the fictional final provider documentation supports Gastro-esophageal reflux disease. The secondary code R07.89 is included because chest discomfort is documented as clinically relevant. Procedure/service code 43200 is linked to esophagoscopy. Medication classification ATC A02BC01 is included for educational drug-code awareness."}, {"id": "ccase-046-abscess", "group": "Skin and Subcutaneous Tissue", "title": "Case 46: Cutaneous abscess", "story": "Fictional training record: patient presents with clinical findings consistent with cutaneous abscess. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Cutaneous abscess", "secondaryDx": [{"label": "Cellulitis", "code": "L03.90"}], "principalDx": {"label": "Cutaneous abscess", "code": "L02.91"}, "finalDx": "Cutaneous abscess", "procedures": [{"label": "Wound culture", "code": "87070"}], "surgeries": [{"label": "Incision and drainage", "code": "10060"}], "medications": [{"label": "Vancomycin", "code": "ATC J01XA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as L02.91 because the fictional final provider documentation supports Cutaneous abscess. The secondary code L03.90 is included because cellulitis is documented as clinically relevant. Procedure/service code 87070 is linked to wound culture. Medication classification ATC J01XA01 is included for educational drug-code awareness."}, {"id": "ccase-047-pressure", "group": "Skin and Subcutaneous Tissue", "title": "Case 47: Pressure ulcer stage 2", "story": "Fictional training record: patient presents with clinical findings consistent with pressure ulcer stage 2. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Pressure ulcer stage 2", "secondaryDx": [{"label": "Limited mobility", "code": "Z74.09"}], "principalDx": {"label": "Pressure ulcer stage 2", "code": "L89.92"}, "finalDx": "Pressure ulcer stage 2", "procedures": [{"label": "Wound assessment", "code": "97597"}], "surgeries": [{"label": "Debridement", "code": "11042"}], "medications": [{"label": "Hydrocolloid dressing", "code": "HCPCS A6234"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as L89.92 because the fictional final provider documentation supports Pressure ulcer stage 2. The secondary code Z74.09 is included because limited mobility is documented as clinically relevant. Procedure/service code 97597 is linked to wound assessment. Medication classification HCPCS A6234 is included for educational drug-code awareness."}, {"id": "ccase-048-burn", "group": "Skin and Subcutaneous Tissue", "title": "Case 48: Second degree burn of hand", "story": "Fictional training record: patient presents with clinical findings consistent with second degree burn of hand. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Second degree burn of hand", "secondaryDx": [{"label": "Accidental contact with hot object", "code": "X19.XXXA"}], "principalDx": {"label": "Second degree burn of hand", "code": "T23.209A"}, "finalDx": "Second degree burn of hand", "procedures": [{"label": "Burn dressing", "code": "16020"}], "surgeries": [], "medications": [{"label": "Silver sulfadiazine", "code": "ATC D06BA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as T23.209A because the fictional final provider documentation supports Second degree burn of hand. The secondary code X19.XXXA is included because accidental contact with hot object is documented as clinically relevant. Procedure/service code 16020 is linked to burn dressing. Medication classification ATC D06BA01 is included for educational drug-code awareness."}, {"id": "ccase-049-dermatitis", "group": "Skin and Subcutaneous Tissue", "title": "Case 49: Atopic dermatitis", "story": "Fictional training record: patient presents with clinical findings consistent with atopic dermatitis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Atopic dermatitis", "secondaryDx": [{"label": "Pruritus", "code": "L29.9"}], "principalDx": {"label": "Atopic dermatitis", "code": "L20.9"}, "finalDx": "Atopic dermatitis", "procedures": [{"label": "Dermatology visit", "code": "99213"}], "surgeries": [], "medications": [{"label": "Hydrocortisone", "code": "ATC D07AA02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as L20.9 because the fictional final provider documentation supports Atopic dermatitis. The secondary code L29.9 is included because pruritus is documented as clinically relevant. Procedure/service code 99213 is linked to dermatology visit. Medication classification ATC D07AA02 is included for educational drug-code awareness."}, {"id": "ccase-050-ulcer", "group": "Skin and Subcutaneous Tissue", "title": "Case 50: Diabetic foot ulcer", "story": "Fictional training record: patient presents with clinical findings consistent with diabetic foot ulcer. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Diabetic foot ulcer", "secondaryDx": [{"label": "Foot ulcer", "code": "L97.509"}], "principalDx": {"label": "Diabetic foot ulcer", "code": "E11.621"}, "finalDx": "Diabetic foot ulcer", "procedures": [{"label": "Wound culture", "code": "87070"}], "surgeries": [{"label": "Debridement", "code": "11042"}], "medications": [{"label": "Cefalexin", "code": "ATC J01DB01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as E11.621 because the fictional final provider documentation supports Diabetic foot ulcer. The secondary code L97.509 is included because foot ulcer is documented as clinically relevant. Procedure/service code 87070 is linked to wound culture. Medication classification ATC J01DB01 is included for educational drug-code awareness."}, {"id": "ccase-051-hip-fracture", "group": "Musculoskeletal System", "title": "Case 51: Fracture of neck of femur", "story": "Fictional training record: patient presents with clinical findings consistent with fracture of neck of femur. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Fracture of neck of femur", "secondaryDx": [{"label": "Fall", "code": "W19.XXXA"}], "principalDx": {"label": "Fracture of neck of femur", "code": "S72.001A"}, "finalDx": "Fracture of neck of femur", "procedures": [{"label": "Hip X-ray", "code": "73502"}], "surgeries": [{"label": "Open treatment hip fracture", "code": "27236"}], "medications": [{"label": "Morphine", "code": "ATC N02AA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as S72.001A because the fictional final provider documentation supports Fracture of neck of femur. The secondary code W19.XXXA is included because fall is documented as clinically relevant. Procedure/service code 73502 is linked to hip x-ray. Medication classification ATC N02AA01 is included for educational drug-code awareness."}, {"id": "ccase-052-osteoarthritis", "group": "Musculoskeletal System", "title": "Case 52: Osteoarthritis of knee", "story": "Fictional training record: patient presents with clinical findings consistent with osteoarthritis of knee. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Osteoarthritis of knee", "secondaryDx": [{"label": "Chronic pain", "code": "G89.29"}], "principalDx": {"label": "Osteoarthritis of knee", "code": "M17.9"}, "finalDx": "Osteoarthritis of knee", "procedures": [{"label": "Knee X-ray", "code": "73562"}], "surgeries": [{"label": "Knee replacement", "code": "27447"}], "medications": [{"label": "Ibuprofen", "code": "ATC M01AE01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as M17.9 because the fictional final provider documentation supports Osteoarthritis of knee. The secondary code G89.29 is included because chronic pain is documented as clinically relevant. Procedure/service code 73562 is linked to knee x-ray. Medication classification ATC M01AE01 is included for educational drug-code awareness."}, {"id": "ccase-053-back-pain", "group": "Musculoskeletal System", "title": "Case 53: Low back pain", "story": "Fictional training record: patient presents with clinical findings consistent with low back pain. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Low back pain", "secondaryDx": [{"label": "Sciatica", "code": "M54.30"}], "principalDx": {"label": "Low back pain", "code": "M54.50"}, "finalDx": "Low back pain", "procedures": [{"label": "Lumbar MRI", "code": "72148"}], "surgeries": [], "medications": [{"label": "Naproxen", "code": "ATC M01AE02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as M54.50 because the fictional final provider documentation supports Low back pain. The secondary code M54.30 is included because sciatica is documented as clinically relevant. Procedure/service code 72148 is linked to lumbar mri. Medication classification ATC M01AE02 is included for educational drug-code awareness."}, {"id": "ccase-054-ra", "group": "Musculoskeletal System", "title": "Case 54: Rheumatoid arthritis", "story": "Fictional training record: patient presents with clinical findings consistent with rheumatoid arthritis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Rheumatoid arthritis", "secondaryDx": [{"label": "Joint swelling", "code": "M25.40"}], "principalDx": {"label": "Rheumatoid arthritis", "code": "M06.9"}, "finalDx": "Rheumatoid arthritis", "procedures": [{"label": "Rheumatology visit", "code": "99214"}], "surgeries": [], "medications": [{"label": "Methotrexate", "code": "ATC L04AX03"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as M06.9 because the fictional final provider documentation supports Rheumatoid arthritis. The secondary code M25.40 is included because joint swelling is documented as clinically relevant. Procedure/service code 99214 is linked to rheumatology visit. Medication classification ATC L04AX03 is included for educational drug-code awareness."}, {"id": "ccase-055-osteomyelitis", "group": "Musculoskeletal System", "title": "Case 55: Osteomyelitis", "story": "Fictional training record: patient presents with clinical findings consistent with osteomyelitis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Osteomyelitis", "secondaryDx": [{"label": "Diabetes", "code": "E11.9"}], "principalDx": {"label": "Osteomyelitis", "code": "M86.9"}, "finalDx": "Osteomyelitis", "procedures": [{"label": "MRI extremity", "code": "73718"}], "surgeries": [{"label": "Bone debridement", "code": "11044"}], "medications": [{"label": "Vancomycin", "code": "ATC J01XA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as M86.9 because the fictional final provider documentation supports Osteomyelitis. The secondary code E11.9 is included because diabetes is documented as clinically relevant. Procedure/service code 73718 is linked to mri extremity. Medication classification ATC J01XA01 is included for educational drug-code awareness."}, {"id": "ccase-056-uti", "group": "Genitourinary System", "title": "Case 56: Urinary tract infection", "story": "Fictional training record: patient presents with clinical findings consistent with urinary tract infection. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Urinary tract infection", "secondaryDx": [{"label": "Dysuria", "code": "R30.0"}], "principalDx": {"label": "Urinary tract infection", "code": "N39.0"}, "finalDx": "Urinary tract infection", "procedures": [{"label": "Urine culture", "code": "87086"}], "surgeries": [], "medications": [{"label": "Nitrofurantoin", "code": "ATC J01XE01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as N39.0 because the fictional final provider documentation supports Urinary tract infection. The secondary code R30.0 is included because dysuria is documented as clinically relevant. Procedure/service code 87086 is linked to urine culture. Medication classification ATC J01XE01 is included for educational drug-code awareness."}, {"id": "ccase-057-aki", "group": "Genitourinary System", "title": "Case 57: Acute kidney injury", "story": "Fictional training record: patient presents with clinical findings consistent with acute kidney injury. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Acute kidney injury", "secondaryDx": [{"label": "Hyperkalemia", "code": "E87.5"}], "principalDx": {"label": "Acute kidney injury", "code": "N17.9"}, "finalDx": "Acute kidney injury", "procedures": [{"label": "Basic metabolic panel", "code": "80048"}], "surgeries": [], "medications": [{"label": "Sodium polystyrene", "code": "ATC V03AE01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as N17.9 because the fictional final provider documentation supports Acute kidney injury. The secondary code E87.5 is included because hyperkalemia is documented as clinically relevant. Procedure/service code 80048 is linked to basic metabolic panel. Medication classification ATC V03AE01 is included for educational drug-code awareness."}, {"id": "ccase-058-ckd", "group": "Genitourinary System", "title": "Case 58: Chronic kidney disease stage 3", "story": "Fictional training record: patient presents with clinical findings consistent with chronic kidney disease stage 3. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Chronic kidney disease stage 3", "secondaryDx": [{"label": "Hypertension", "code": "I10"}], "principalDx": {"label": "Chronic kidney disease stage 3", "code": "N18.30"}, "finalDx": "Chronic kidney disease stage 3", "procedures": [{"label": "Creatinine test", "code": "82565"}], "surgeries": [], "medications": [{"label": "ACE inhibitor", "code": "ATC C09AA"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as N18.30 because the fictional final provider documentation supports Chronic kidney disease stage 3. The secondary code I10 is included because hypertension is documented as clinically relevant. Procedure/service code 82565 is linked to creatinine test. Medication classification ATC C09AA is included for educational drug-code awareness."}, {"id": "ccase-059-renal-stone", "group": "Genitourinary System", "title": "Case 59: Kidney stone", "story": "Fictional training record: patient presents with clinical findings consistent with kidney stone. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Kidney stone", "secondaryDx": [{"label": "Renal colic", "code": "N23"}], "principalDx": {"label": "Kidney stone", "code": "N20.0"}, "finalDx": "Kidney stone", "procedures": [{"label": "CT KUB", "code": "74176"}], "surgeries": [{"label": "Ureteroscopy", "code": "52351"}], "medications": [{"label": "Tamsulosin", "code": "ATC G04CA02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as N20.0 because the fictional final provider documentation supports Kidney stone. The secondary code N23 is included because renal colic is documented as clinically relevant. Procedure/service code 74176 is linked to ct kub. Medication classification ATC G04CA02 is included for educational drug-code awareness."}, {"id": "ccase-060-bph", "group": "Genitourinary System", "title": "Case 60: Benign prostatic hyperplasia", "story": "Fictional training record: patient presents with clinical findings consistent with benign prostatic hyperplasia. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Benign prostatic hyperplasia", "secondaryDx": [{"label": "Urinary frequency", "code": "R35.0"}], "principalDx": {"label": "Benign prostatic hyperplasia", "code": "N40.0"}, "finalDx": "Benign prostatic hyperplasia", "procedures": [{"label": "Urinalysis", "code": "81001"}], "surgeries": [{"label": "TURP", "code": "52601"}], "medications": [{"label": "Finasteride", "code": "ATC G04CB01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as N40.0 because the fictional final provider documentation supports Benign prostatic hyperplasia. The secondary code R35.0 is included because urinary frequency is documented as clinically relevant. Procedure/service code 81001 is linked to urinalysis. Medication classification ATC G04CB01 is included for educational drug-code awareness."}, {"id": "ccase-061-normal-delivery", "group": "Pregnancy, Childbirth and Puerperium", "title": "Case 61: Single live birth vaginal delivery", "story": "Fictional training record: patient presents with clinical findings consistent with single live birth vaginal delivery. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Single live birth vaginal delivery", "secondaryDx": [{"label": "Term pregnancy", "code": "Z37.0"}], "principalDx": {"label": "Single live birth vaginal delivery", "code": "O80"}, "finalDx": "Single live birth vaginal delivery", "procedures": [{"label": "Delivery management", "code": "59400"}], "surgeries": [{"label": "Vaginal delivery", "code": "59400"}], "medications": [{"label": "Oxytocin", "code": "ATC H01BB02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as O80 because the fictional final provider documentation supports Single live birth vaginal delivery. The secondary code Z37.0 is included because term pregnancy is documented as clinically relevant. Procedure/service code 59400 is linked to delivery management. Medication classification ATC H01BB02 is included for educational drug-code awareness."}, {"id": "ccase-062-csection", "group": "Pregnancy, Childbirth and Puerperium", "title": "Case 62: Obstructed labor requiring cesarean", "story": "Fictional training record: patient presents with clinical findings consistent with obstructed labor requiring cesarean. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Obstructed labor requiring cesarean", "secondaryDx": [{"label": "Single live birth", "code": "Z37.0"}], "principalDx": {"label": "Obstructed labor requiring cesarean", "code": "O64.9"}, "finalDx": "Obstructed labor requiring cesarean", "procedures": [{"label": "Fetal monitoring", "code": "59025"}], "surgeries": [{"label": "Cesarean delivery", "code": "59510"}], "medications": [{"label": "Cefazolin", "code": "ATC J01DB04"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as O64.9 because the fictional final provider documentation supports Obstructed labor requiring cesarean. The secondary code Z37.0 is included because single live birth is documented as clinically relevant. Procedure/service code 59025 is linked to fetal monitoring. Medication classification ATC J01DB04 is included for educational drug-code awareness."}, {"id": "ccase-063-preeclampsia", "group": "Pregnancy, Childbirth and Puerperium", "title": "Case 63: Preeclampsia", "story": "Fictional training record: patient presents with clinical findings consistent with preeclampsia. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Preeclampsia", "secondaryDx": [{"label": "Proteinuria", "code": "R80.9"}], "principalDx": {"label": "Preeclampsia", "code": "O14.90"}, "finalDx": "Preeclampsia", "procedures": [{"label": "Urine protein", "code": "84156"}], "surgeries": [], "medications": [{"label": "Magnesium sulfate", "code": "ATC B05XA05"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as O14.90 because the fictional final provider documentation supports Preeclampsia. The secondary code R80.9 is included because proteinuria is documented as clinically relevant. Procedure/service code 84156 is linked to urine protein. Medication classification ATC B05XA05 is included for educational drug-code awareness."}, {"id": "ccase-064-postpartum", "group": "Pregnancy, Childbirth and Puerperium", "title": "Case 64: Postpartum hemorrhage", "story": "Fictional training record: patient presents with clinical findings consistent with postpartum hemorrhage. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Postpartum hemorrhage", "secondaryDx": [{"label": "Anemia", "code": "D64.9"}], "principalDx": {"label": "Postpartum hemorrhage", "code": "O72.1"}, "finalDx": "Postpartum hemorrhage", "procedures": [{"label": "CBC", "code": "85025"}], "surgeries": [{"label": "Uterine tamponade", "code": "59899"}], "medications": [{"label": "Oxytocin", "code": "ATC H01BB02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as O72.1 because the fictional final provider documentation supports Postpartum hemorrhage. The secondary code D64.9 is included because anemia is documented as clinically relevant. Procedure/service code 85025 is linked to cbc. Medication classification ATC H01BB02 is included for educational drug-code awareness."}, {"id": "ccase-065-hyperemesis", "group": "Pregnancy, Childbirth and Puerperium", "title": "Case 65: Hyperemesis gravidarum", "story": "Fictional training record: patient presents with clinical findings consistent with hyperemesis gravidarum. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Hyperemesis gravidarum", "secondaryDx": [{"label": "Dehydration", "code": "E86.0"}], "principalDx": {"label": "Hyperemesis gravidarum", "code": "O21.0"}, "finalDx": "Hyperemesis gravidarum", "procedures": [{"label": "Electrolyte panel", "code": "80051"}], "surgeries": [], "medications": [{"label": "Ondansetron", "code": "ATC A04AA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as O21.0 because the fictional final provider documentation supports Hyperemesis gravidarum. The secondary code E86.0 is included because dehydration is documented as clinically relevant. Procedure/service code 80051 is linked to electrolyte panel. Medication classification ATC A04AA01 is included for educational drug-code awareness."}, {"id": "ccase-066-newborn-jaundice", "group": "Perinatal and Congenital Conditions", "title": "Case 66: Neonatal jaundice", "story": "Fictional training record: patient presents with clinical findings consistent with neonatal jaundice. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Neonatal jaundice", "secondaryDx": [{"label": "Term newborn", "code": "Z38.00"}], "principalDx": {"label": "Neonatal jaundice", "code": "P59.9"}, "finalDx": "Neonatal jaundice", "procedures": [{"label": "Bilirubin test", "code": "82247"}], "surgeries": [], "medications": [{"label": "Phototherapy", "code": "CPT 96900"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as P59.9 because the fictional final provider documentation supports Neonatal jaundice. The secondary code Z38.00 is included because term newborn is documented as clinically relevant. Procedure/service code 82247 is linked to bilirubin test. Medication classification CPT 96900 is included for educational drug-code awareness."}, {"id": "ccase-067-prematurity", "group": "Perinatal and Congenital Conditions", "title": "Case 67: Preterm newborn", "story": "Fictional training record: patient presents with clinical findings consistent with preterm newborn. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Preterm newborn", "secondaryDx": [{"label": "Low birth weight", "code": "P07.10"}], "principalDx": {"label": "Preterm newborn", "code": "P07.30"}, "finalDx": "Preterm newborn", "procedures": [{"label": "NICU monitoring", "code": "99468"}], "surgeries": [], "medications": [{"label": "Caffeine citrate", "code": "ATC N06BC01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as P07.30 because the fictional final provider documentation supports Preterm newborn. The secondary code P07.10 is included because low birth weight is documented as clinically relevant. Procedure/service code 99468 is linked to nicu monitoring. Medication classification ATC N06BC01 is included for educational drug-code awareness."}, {"id": "ccase-068-cleft-palate", "group": "Perinatal and Congenital Conditions", "title": "Case 68: Cleft palate", "story": "Fictional training record: patient presents with clinical findings consistent with cleft palate. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Cleft palate", "secondaryDx": [{"label": "Feeding difficulty", "code": "R63.30"}], "principalDx": {"label": "Cleft palate", "code": "Q35.9"}, "finalDx": "Cleft palate", "procedures": [{"label": "Speech evaluation", "code": "92523"}], "surgeries": [{"label": "Cleft repair", "code": "42200"}], "medications": [{"label": "Nutritional support", "code": "HCPCS B4100"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as Q35.9 because the fictional final provider documentation supports Cleft palate. The secondary code R63.30 is included because feeding difficulty is documented as clinically relevant. Procedure/service code 92523 is linked to speech evaluation. Medication classification HCPCS B4100 is included for educational drug-code awareness."}, {"id": "ccase-069-congenital-heart", "group": "Perinatal and Congenital Conditions", "title": "Case 69: Congenital heart defect", "story": "Fictional training record: patient presents with clinical findings consistent with congenital heart defect. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Congenital heart defect", "secondaryDx": [{"label": "Cyanosis", "code": "R23.0"}], "principalDx": {"label": "Congenital heart defect", "code": "Q24.9"}, "finalDx": "Congenital heart defect", "procedures": [{"label": "Echocardiography", "code": "93303"}], "surgeries": [{"label": "Cardiac repair", "code": "33690"}], "medications": [{"label": "Prostaglandin E1", "code": "ATC C01EA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as Q24.9 because the fictional final provider documentation supports Congenital heart defect. The secondary code R23.0 is included because cyanosis is documented as clinically relevant. Procedure/service code 93303 is linked to echocardiography. Medication classification ATC C01EA01 is included for educational drug-code awareness."}, {"id": "ccase-070-newborn-sepsis", "group": "Perinatal and Congenital Conditions", "title": "Case 70: Newborn sepsis", "story": "Fictional training record: patient presents with clinical findings consistent with newborn sepsis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Newborn sepsis", "secondaryDx": [{"label": "Respiratory distress newborn", "code": "P22.9"}], "principalDx": {"label": "Newborn sepsis", "code": "P36.9"}, "finalDx": "Newborn sepsis", "procedures": [{"label": "Blood culture", "code": "87040"}], "surgeries": [], "medications": [{"label": "Ampicillin", "code": "ATC J01CA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as P36.9 because the fictional final provider documentation supports Newborn sepsis. The secondary code P22.9 is included because respiratory distress newborn is documented as clinically relevant. Procedure/service code 87040 is linked to blood culture. Medication classification ATC J01CA01 is included for educational drug-code awareness."}, {"id": "ccase-071-head-injury", "group": "Injury, Poisoning and External Causes", "title": "Case 71: Concussion without loss of consciousness", "story": "Fictional training record: patient presents with clinical findings consistent with concussion without loss of consciousness. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Concussion without loss of consciousness", "secondaryDx": [{"label": "Fall from stairs", "code": "W10.9XXA"}], "principalDx": {"label": "Concussion without loss of consciousness", "code": "S06.0X0A"}, "finalDx": "Concussion without loss of consciousness", "procedures": [{"label": "CT head", "code": "70450"}], "surgeries": [], "medications": [{"label": "Acetaminophen", "code": "ATC N02BE01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as S06.0X0A because the fictional final provider documentation supports Concussion without loss of consciousness. The secondary code W10.9XXA is included because fall from stairs is documented as clinically relevant. Procedure/service code 70450 is linked to ct head. Medication classification ATC N02BE01 is included for educational drug-code awareness."}, {"id": "ccase-072-poisoning", "group": "Injury, Poisoning and External Causes", "title": "Case 72: Accidental poisoning by benzodiazepine", "story": "Fictional training record: patient presents with clinical findings consistent with accidental poisoning by benzodiazepine. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Accidental poisoning by benzodiazepine", "secondaryDx": [{"label": "Altered mental status", "code": "R41.82"}], "principalDx": {"label": "Accidental poisoning by benzodiazepine", "code": "T42.4X1A"}, "finalDx": "Accidental poisoning by benzodiazepine", "procedures": [{"label": "Toxicology screen", "code": "80307"}], "surgeries": [], "medications": [{"label": "Flumazenil", "code": "ATC V03AB25"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as T42.4X1A because the fictional final provider documentation supports Accidental poisoning by benzodiazepine. The secondary code R41.82 is included because altered mental status is documented as clinically relevant. Procedure/service code 80307 is linked to toxicology screen. Medication classification ATC V03AB25 is included for educational drug-code awareness."}, {"id": "ccase-073-laceration", "group": "Injury, Poisoning and External Causes", "title": "Case 73: Forearm laceration", "story": "Fictional training record: patient presents with clinical findings consistent with forearm laceration. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Forearm laceration", "secondaryDx": [{"label": "Work-related injury", "code": "Y99.0"}], "principalDx": {"label": "Forearm laceration", "code": "S51.819A"}, "finalDx": "Forearm laceration", "procedures": [{"label": "Wound repair", "code": "12002"}], "surgeries": [{"label": "Laceration repair", "code": "12002"}], "medications": [{"label": "Tetanus vaccine", "code": "CPT 90715"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as S51.819A because the fictional final provider documentation supports Forearm laceration. The secondary code Y99.0 is included because work-related injury is documented as clinically relevant. Procedure/service code 12002 is linked to wound repair. Medication classification CPT 90715 is included for educational drug-code awareness."}, {"id": "ccase-074-fracture-arm", "group": "Injury, Poisoning and External Causes", "title": "Case 74: Closed fracture of radius", "story": "Fictional training record: patient presents with clinical findings consistent with closed fracture of radius. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Closed fracture of radius", "secondaryDx": [{"label": "Sports injury", "code": "Y93.79"}], "principalDx": {"label": "Closed fracture of radius", "code": "S52.509A"}, "finalDx": "Closed fracture of radius", "procedures": [{"label": "Forearm X-ray", "code": "73090"}], "surgeries": [{"label": "Closed treatment", "code": "25500"}], "medications": [{"label": "Ibuprofen", "code": "ATC M01AE01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as S52.509A because the fictional final provider documentation supports Closed fracture of radius. The secondary code Y93.79 is included because sports injury is documented as clinically relevant. Procedure/service code 73090 is linked to forearm x-ray. Medication classification ATC M01AE01 is included for educational drug-code awareness."}, {"id": "ccase-075-burn-injury", "group": "Injury, Poisoning and External Causes", "title": "Case 75: Thermal burn chest wall", "story": "Fictional training record: patient presents with clinical findings consistent with thermal burn chest wall. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Thermal burn chest wall", "secondaryDx": [{"label": "Hot liquid exposure", "code": "X12.XXXA"}], "principalDx": {"label": "Thermal burn chest wall", "code": "T21.21XA"}, "finalDx": "Thermal burn chest wall", "procedures": [{"label": "Burn care", "code": "16020"}], "surgeries": [], "medications": [{"label": "Silver dressing", "code": "HCPCS A6209"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as T21.21XA because the fictional final provider documentation supports Thermal burn chest wall. The secondary code X12.XXXA is included because hot liquid exposure is documented as clinically relevant. Procedure/service code 16020 is linked to burn care. Medication classification HCPCS A6209 is included for educational drug-code awareness."}, {"id": "ccase-076-chest-pain", "group": "Symptoms, Signs and Abnormal Findings", "title": "Case 76: Chest pain, unspecified", "story": "Fictional training record: patient presents with clinical findings consistent with chest pain, unspecified. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Chest pain", "secondaryDx": [{"label": "Rule out MI", "code": "Z03.89"}], "principalDx": {"label": "Chest pain, unspecified", "code": "R07.9"}, "finalDx": "Chest pain, unspecified", "procedures": [{"label": "ECG", "code": "93000"}], "surgeries": [], "medications": [{"label": "Aspirin", "code": "ATC B01AC06"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as R07.9 because the fictional final provider documentation supports Chest pain, unspecified. The secondary code Z03.89 is included because rule out mi is documented as clinically relevant. Procedure/service code 93000 is linked to ecg. Medication classification ATC B01AC06 is included for educational drug-code awareness."}, {"id": "ccase-077-fever", "group": "Symptoms, Signs and Abnormal Findings", "title": "Case 77: Fever of unknown origin", "story": "Fictional training record: patient presents with clinical findings consistent with fever of unknown origin. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Fever of unknown origin", "secondaryDx": [{"label": "Leukocytosis", "code": "D72.829"}], "principalDx": {"label": "Fever of unknown origin", "code": "R50.9"}, "finalDx": "Fever of unknown origin", "procedures": [{"label": "CBC", "code": "85025"}], "surgeries": [], "medications": [{"label": "Acetaminophen", "code": "ATC N02BE01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as R50.9 because the fictional final provider documentation supports Fever of unknown origin. The secondary code D72.829 is included because leukocytosis is documented as clinically relevant. Procedure/service code 85025 is linked to cbc. Medication classification ATC N02BE01 is included for educational drug-code awareness."}, {"id": "ccase-078-syncope", "group": "Symptoms, Signs and Abnormal Findings", "title": "Case 78: Syncope and collapse", "story": "Fictional training record: patient presents with clinical findings consistent with syncope and collapse. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Syncope and collapse", "secondaryDx": [{"label": "Dehydration", "code": "E86.0"}], "principalDx": {"label": "Syncope and collapse", "code": "R55"}, "finalDx": "Syncope and collapse", "procedures": [{"label": "ECG", "code": "93000"}], "surgeries": [], "medications": [{"label": "IV fluids", "code": "CPT 96360"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as R55 because the fictional final provider documentation supports Syncope and collapse. The secondary code E86.0 is included because dehydration is documented as clinically relevant. Procedure/service code 93000 is linked to ecg. Medication classification CPT 96360 is included for educational drug-code awareness."}, {"id": "ccase-079-abdominal-pain", "group": "Symptoms, Signs and Abnormal Findings", "title": "Case 79: Abdominal pain", "story": "Fictional training record: patient presents with clinical findings consistent with abdominal pain. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Abdominal pain", "secondaryDx": [{"label": "Nausea", "code": "R11.0"}], "principalDx": {"label": "Abdominal pain", "code": "R10.9"}, "finalDx": "Abdominal pain", "procedures": [{"label": "CT abdomen", "code": "74177"}], "surgeries": [], "medications": [{"label": "Ondansetron", "code": "ATC A04AA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as R10.9 because the fictional final provider documentation supports Abdominal pain. The secondary code R11.0 is included because nausea is documented as clinically relevant. Procedure/service code 74177 is linked to ct abdomen. Medication classification ATC A04AA01 is included for educational drug-code awareness."}, {"id": "ccase-080-abnormal-lab", "group": "Symptoms, Signs and Abnormal Findings", "title": "Case 80: Abnormal glucose finding", "story": "Fictional training record: patient presents with clinical findings consistent with abnormal glucose finding. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Abnormal glucose finding", "secondaryDx": [{"label": "Family history diabetes", "code": "Z83.3"}], "principalDx": {"label": "Abnormal glucose finding", "code": "R73.09"}, "finalDx": "Abnormal glucose finding", "procedures": [{"label": "HbA1c", "code": "83036"}], "surgeries": [], "medications": [{"label": "Lifestyle counseling", "code": "CPT 99401"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as R73.09 because the fictional final provider documentation supports Abnormal glucose finding. The secondary code Z83.3 is included because family history diabetes is documented as clinically relevant. Procedure/service code 83036 is linked to hba1c. Medication classification CPT 99401 is included for educational drug-code awareness."}, {"id": "ccase-081-caries", "group": "Dental and Oral Health", "title": "Case 81: Dental caries", "story": "Fictional training record: patient presents with clinical findings consistent with dental caries. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Dental caries", "secondaryDx": [{"label": "Tooth pain", "code": "K08.89"}], "principalDx": {"label": "Dental caries", "code": "K02.9"}, "finalDx": "Dental caries", "procedures": [{"label": "Dental exam", "code": "D0120"}], "surgeries": [{"label": "Dental restoration", "code": "D2391"}], "medications": [{"label": "Fluoride varnish", "code": "D1206"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as K02.9 because the fictional final provider documentation supports Dental caries. The secondary code K08.89 is included because tooth pain is documented as clinically relevant. Procedure/service code D0120 is linked to dental exam. Medication classification D1206 is included for educational drug-code awareness."}, {"id": "ccase-082-periodontitis", "group": "Dental and Oral Health", "title": "Case 82: Chronic periodontitis", "story": "Fictional training record: patient presents with clinical findings consistent with chronic periodontitis. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Chronic periodontitis", "secondaryDx": [{"label": "Gum bleeding", "code": "K06.8"}], "principalDx": {"label": "Chronic periodontitis", "code": "K05.30"}, "finalDx": "Chronic periodontitis", "procedures": [{"label": "Periodontal charting", "code": "D0180"}], "surgeries": [{"label": "Scaling and root planing", "code": "D4341"}], "medications": [{"label": "Chlorhexidine", "code": "ATC A01AB03"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as K05.30 because the fictional final provider documentation supports Chronic periodontitis. The secondary code K06.8 is included because gum bleeding is documented as clinically relevant. Procedure/service code D0180 is linked to periodontal charting. Medication classification ATC A01AB03 is included for educational drug-code awareness."}, {"id": "ccase-083-impacted-tooth", "group": "Dental and Oral Health", "title": "Case 83: Impacted tooth", "story": "Fictional training record: patient presents with clinical findings consistent with impacted tooth. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Impacted tooth", "secondaryDx": [{"label": "Jaw pain", "code": "R68.84"}], "principalDx": {"label": "Impacted tooth", "code": "K01.1"}, "finalDx": "Impacted tooth", "procedures": [{"label": "Dental radiograph", "code": "D0220"}], "surgeries": [{"label": "Extraction", "code": "D7240"}], "medications": [{"label": "Ibuprofen", "code": "ATC M01AE01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as K01.1 because the fictional final provider documentation supports Impacted tooth. The secondary code R68.84 is included because jaw pain is documented as clinically relevant. Procedure/service code D0220 is linked to dental radiograph. Medication classification ATC M01AE01 is included for educational drug-code awareness."}, {"id": "ccase-084-oral-abscess", "group": "Dental and Oral Health", "title": "Case 84: Periapical abscess", "story": "Fictional training record: patient presents with clinical findings consistent with periapical abscess. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Periapical abscess", "secondaryDx": [{"label": "Facial swelling", "code": "R22.0"}], "principalDx": {"label": "Periapical abscess", "code": "K04.7"}, "finalDx": "Periapical abscess", "procedures": [{"label": "Dental X-ray", "code": "D0230"}], "surgeries": [{"label": "Incision drainage", "code": "D7510"}], "medications": [{"label": "Amoxicillin", "code": "ATC J01CA04"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as K04.7 because the fictional final provider documentation supports Periapical abscess. The secondary code R22.0 is included because facial swelling is documented as clinically relevant. Procedure/service code D0230 is linked to dental x-ray. Medication classification ATC J01CA04 is included for educational drug-code awareness."}, {"id": "ccase-085-dentures", "group": "Dental and Oral Health", "title": "Case 85: Loss of teeth", "story": "Fictional training record: patient presents with clinical findings consistent with loss of teeth. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Loss of teeth", "secondaryDx": [{"label": "Mastication difficulty", "code": "R63.30"}], "principalDx": {"label": "Loss of teeth", "code": "K08.109"}, "finalDx": "Loss of teeth", "procedures": [{"label": "Prosthodontic evaluation", "code": "D0150"}], "surgeries": [{"label": "Complete denture", "code": "D5110"}], "medications": [{"label": "Denture adhesive", "code": "HCPCS A9270"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as K08.109 because the fictional final provider documentation supports Loss of teeth. The secondary code R63.30 is included because mastication difficulty is documented as clinically relevant. Procedure/service code D0150 is linked to prosthodontic evaluation. Medication classification HCPCS A9270 is included for educational drug-code awareness."}, {"id": "ccase-086-central-line", "group": "Procedures and Surgical Coding", "title": "Case 86: Central venous catheter placement", "story": "Fictional training record: patient presents with clinical findings consistent with central venous catheter placement. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Central venous catheter placement", "secondaryDx": [{"label": "Sepsis", "code": "A41.9"}], "principalDx": {"label": "Central venous catheter placement", "code": "Z45.2"}, "finalDx": "Central venous catheter placement", "procedures": [{"label": "Ultrasound guidance", "code": "76937"}], "surgeries": [{"label": "Central line", "code": "36556"}], "medications": [{"label": "Lidocaine", "code": "ATC N01BB02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as Z45.2 because the fictional final provider documentation supports Central venous catheter placement. The secondary code A41.9 is included because sepsis is documented as clinically relevant. Procedure/service code 76937 is linked to ultrasound guidance. Medication classification ATC N01BB02 is included for educational drug-code awareness."}, {"id": "ccase-087-biopsy", "group": "Procedures and Surgical Coding", "title": "Case 87: Percutaneous liver biopsy", "story": "Fictional training record: patient presents with clinical findings consistent with percutaneous liver biopsy. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Percutaneous liver biopsy", "secondaryDx": [{"label": "Abnormal liver tests", "code": "R79.89"}], "principalDx": {"label": "Percutaneous liver biopsy", "code": "R94.5"}, "finalDx": "Percutaneous liver biopsy", "procedures": [{"label": "Ultrasound guidance", "code": "76942"}], "surgeries": [{"label": "Liver biopsy", "code": "47000"}], "medications": [{"label": "Local anesthetic", "code": "ATC N01BB02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as R94.5 because the fictional final provider documentation supports Percutaneous liver biopsy. The secondary code R79.89 is included because abnormal liver tests is documented as clinically relevant. Procedure/service code 76942 is linked to ultrasound guidance. Medication classification ATC N01BB02 is included for educational drug-code awareness."}, {"id": "ccase-088-dialysis", "group": "Procedures and Surgical Coding", "title": "Case 88: Hemodialysis session", "story": "Fictional training record: patient presents with clinical findings consistent with hemodialysis session. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Hemodialysis session", "secondaryDx": [{"label": "End stage renal disease", "code": "N18.6"}], "principalDx": {"label": "Hemodialysis session", "code": "Z49.31"}, "finalDx": "Hemodialysis session", "procedures": [{"label": "Dialysis procedure", "code": "90935"}], "surgeries": [{"label": "Hemodialysis", "code": "90935"}], "medications": [{"label": "Heparin", "code": "ATC B01AB01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as Z49.31 because the fictional final provider documentation supports Hemodialysis session. The secondary code N18.6 is included because end stage renal disease is documented as clinically relevant. Procedure/service code 90935 is linked to dialysis procedure. Medication classification ATC B01AB01 is included for educational drug-code awareness."}, {"id": "ccase-089-wound-closure", "group": "Procedures and Surgical Coding", "title": "Case 89: Complex wound closure", "story": "Fictional training record: patient presents with clinical findings consistent with complex wound closure. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Complex wound closure", "secondaryDx": [{"label": "Facial laceration", "code": "S01.81XA"}], "principalDx": {"label": "Complex wound closure", "code": "S01.81XA"}, "finalDx": "Complex wound closure", "procedures": [{"label": "Suture repair", "code": "13132"}], "surgeries": [{"label": "Complex repair", "code": "13132"}], "medications": [{"label": "Lidocaine", "code": "ATC N01BB02"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as S01.81XA because the fictional final provider documentation supports Complex wound closure. The secondary code S01.81XA is included because facial laceration is documented as clinically relevant. Procedure/service code 13132 is linked to suture repair. Medication classification ATC N01BB02 is included for educational drug-code awareness."}, {"id": "ccase-090-endoscopy", "group": "Procedures and Surgical Coding", "title": "Case 90: Diagnostic colonoscopy", "story": "Fictional training record: patient presents with clinical findings consistent with diagnostic colonoscopy. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Diagnostic colonoscopy", "secondaryDx": [{"label": "Screening for colon cancer", "code": "Z12.11"}], "principalDx": {"label": "Diagnostic colonoscopy", "code": "Z12.11"}, "finalDx": "Diagnostic colonoscopy", "procedures": [{"label": "Colonoscopy", "code": "45378"}], "surgeries": [{"label": "Colonoscopy", "code": "45378"}], "medications": [{"label": "Bowel prep", "code": "ATC A06AD"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as Z12.11 because the fictional final provider documentation supports Diagnostic colonoscopy. The secondary code Z12.11 is included because screening for colon cancer is documented as clinically relevant. Procedure/service code 45378 is linked to colonoscopy. Medication classification ATC A06AD is included for educational drug-code awareness."}, {"id": "ccase-091-anticoagulant", "group": "Medication and Drug Coding", "title": "Case 91: Long-term anticoagulant therapy", "story": "Fictional training record: patient presents with clinical findings consistent with long-term anticoagulant therapy. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Long-term anticoagulant therapy", "secondaryDx": [{"label": "Atrial fibrillation", "code": "I48.91"}], "principalDx": {"label": "Long-term anticoagulant therapy", "code": "Z79.01"}, "finalDx": "Long-term anticoagulant therapy", "procedures": [{"label": "INR test", "code": "85610"}], "surgeries": [], "medications": [{"label": "Warfarin", "code": "ATC B01AA03"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as Z79.01 because the fictional final provider documentation supports Long-term anticoagulant therapy. The secondary code I48.91 is included because atrial fibrillation is documented as clinically relevant. Procedure/service code 85610 is linked to inr test. Medication classification ATC B01AA03 is included for educational drug-code awareness."}, {"id": "ccase-092-antibiotic", "group": "Medication and Drug Coding", "title": "Case 92: IV antibiotic therapy", "story": "Fictional training record: patient presents with clinical findings consistent with iv antibiotic therapy. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "IV antibiotic therapy", "secondaryDx": [{"label": "Cellulitis", "code": "L03.90"}], "principalDx": {"label": "IV antibiotic therapy", "code": "Z79.2"}, "finalDx": "IV antibiotic therapy", "procedures": [{"label": "Therapeutic infusion", "code": "96365"}], "surgeries": [], "medications": [{"label": "Vancomycin", "code": "ATC J01XA01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as Z79.2 because the fictional final provider documentation supports IV antibiotic therapy. The secondary code L03.90 is included because cellulitis is documented as clinically relevant. Procedure/service code 96365 is linked to therapeutic infusion. Medication classification ATC J01XA01 is included for educational drug-code awareness."}, {"id": "ccase-093-insulin", "group": "Medication and Drug Coding", "title": "Case 93: Long-term insulin use", "story": "Fictional training record: patient presents with clinical findings consistent with long-term insulin use. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Long-term insulin use", "secondaryDx": [{"label": "Type 1 diabetes", "code": "E10.9"}], "principalDx": {"label": "Long-term insulin use", "code": "Z79.4"}, "finalDx": "Long-term insulin use", "procedures": [{"label": "Glucose monitoring", "code": "82947"}], "surgeries": [], "medications": [{"label": "Insulin glargine", "code": "ATC A10AE04"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as Z79.4 because the fictional final provider documentation supports Long-term insulin use. The secondary code E10.9 is included because type 1 diabetes is documented as clinically relevant. Procedure/service code 82947 is linked to glucose monitoring. Medication classification ATC A10AE04 is included for educational drug-code awareness."}, {"id": "ccase-094-chemo", "group": "Medication and Drug Coding", "title": "Case 94: Antineoplastic chemotherapy encounter", "story": "Fictional training record: patient presents with clinical findings consistent with antineoplastic chemotherapy encounter. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Antineoplastic chemotherapy encounter", "secondaryDx": [{"label": "Breast cancer", "code": "C50.919"}], "principalDx": {"label": "Antineoplastic chemotherapy encounter", "code": "Z51.11"}, "finalDx": "Antineoplastic chemotherapy encounter", "procedures": [{"label": "Chemotherapy admin", "code": "96413"}], "surgeries": [], "medications": [{"label": "Doxorubicin", "code": "ATC L01DB01"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as Z51.11 because the fictional final provider documentation supports Antineoplastic chemotherapy encounter. The secondary code C50.919 is included because breast cancer is documented as clinically relevant. Procedure/service code 96413 is linked to chemotherapy admin. Medication classification ATC L01DB01 is included for educational drug-code awareness."}, {"id": "ccase-095-vaccine", "group": "Medication and Drug Coding", "title": "Case 95: Immunization encounter", "story": "Fictional training record: patient presents with clinical findings consistent with immunization encounter. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Immunization encounter", "secondaryDx": [{"label": "Need for vaccination", "code": "Z23"}], "principalDx": {"label": "Immunization encounter", "code": "Z23"}, "finalDx": "Immunization encounter", "procedures": [{"label": "Vaccine administration", "code": "90471"}], "surgeries": [], "medications": [{"label": "Influenza vaccine", "code": "CPT 90686"}], "mortality": [], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as Z23 because the fictional final provider documentation supports Immunization encounter. The secondary code Z23 is included because need for vaccination is documented as clinically relevant. Procedure/service code 90471 is linked to vaccine administration. Medication classification CPT 90686 is included for educational drug-code awareness."}, {"id": "ccase-096-mort-pneumonia", "group": "Mortality Coding", "title": "Case 96: Death due to pneumonia leading to respiratory failure", "story": "Fictional training record: patient presents with clinical findings consistent with death due to pneumonia leading to respiratory failure. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Death due to pneumonia leading to respiratory failure", "secondaryDx": [{"label": "Acute respiratory failure", "code": "J96.00"}], "principalDx": {"label": "Death due to pneumonia leading to respiratory failure", "code": "J18.9"}, "finalDx": "Death due to pneumonia leading to respiratory failure", "procedures": [{"label": "Death certificate review", "code": "MORT-DC"}], "surgeries": [{"label": "Underlying cause:", "code": "pneumonia"}], "medications": [{"label": "Oxygen therapy", "code": "HCPCS E0424"}], "mortality": [{"label": "Underlying cause: pneumonia", "code": "J18.9"}], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as J18.9 because the fictional final provider documentation supports Death due to pneumonia leading to respiratory failure. The secondary code J96.00 is included because acute respiratory failure is documented as clinically relevant. Procedure/service code MORT-DC is linked to death certificate review. Medication classification HCPCS E0424 is included for educational drug-code awareness."}, {"id": "ccase-097-mort-mi", "group": "Mortality Coding", "title": "Case 97: Death due to acute myocardial infarction", "story": "Fictional training record: patient presents with clinical findings consistent with death due to acute myocardial infarction. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Death due to acute myocardial infarction", "secondaryDx": [{"label": "Cardiac arrest terminal event", "code": "I46.9"}], "principalDx": {"label": "Death due to acute myocardial infarction", "code": "I21.9"}, "finalDx": "Death due to acute myocardial infarction", "procedures": [{"label": "Death certificate review", "code": "MORT-DC"}], "surgeries": [{"label": "Underlying cause:", "code": "AMI"}], "medications": [{"label": "Aspirin", "code": "ATC B01AC06"}], "mortality": [{"label": "Underlying cause: AMI", "code": "I21.9"}], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as I21.9 because the fictional final provider documentation supports Death due to acute myocardial infarction. The secondary code I46.9 is included because cardiac arrest terminal event is documented as clinically relevant. Procedure/service code MORT-DC is linked to death certificate review. Medication classification ATC B01AC06 is included for educational drug-code awareness."}, {"id": "ccase-098-mort-stroke", "group": "Mortality Coding", "title": "Case 98: Death due to cerebral infarction", "story": "Fictional training record: patient presents with clinical findings consistent with death due to cerebral infarction. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Death due to cerebral infarction", "secondaryDx": [{"label": "Coma", "code": "R40.20"}], "principalDx": {"label": "Death due to cerebral infarction", "code": "I63.9"}, "finalDx": "Death due to cerebral infarction", "procedures": [{"label": "Death certificate review", "code": "MORT-DC"}], "surgeries": [{"label": "Underlying cause: cerebral", "code": "infarction"}], "medications": [{"label": "Supportive care", "code": "MORT-SUP"}], "mortality": [{"label": "Underlying cause: cerebral infarction", "code": "I63.9"}], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as I63.9 because the fictional final provider documentation supports Death due to cerebral infarction. The secondary code R40.20 is included because coma is documented as clinically relevant. Procedure/service code MORT-DC is linked to death certificate review. Medication classification MORT-SUP is included for educational drug-code awareness."}, {"id": "ccase-099-mort-cancer", "group": "Mortality Coding", "title": "Case 99: Death due to lung cancer with respiratory failure", "story": "Fictional training record: patient presents with clinical findings consistent with death due to lung cancer with respiratory failure. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Death due to lung cancer with respiratory failure", "secondaryDx": [{"label": "Acute respiratory failure", "code": "J96.00"}], "principalDx": {"label": "Death due to lung cancer with respiratory failure", "code": "C34.90"}, "finalDx": "Death due to lung cancer with respiratory failure", "procedures": [{"label": "Death certificate review", "code": "MORT-DC"}], "surgeries": [{"label": "Underlying cause: lung", "code": "cancer"}], "medications": [{"label": "Morphine palliative", "code": "ATC N02AA01"}], "mortality": [{"label": "Underlying cause: lung cancer", "code": "C34.90"}], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as C34.90 because the fictional final provider documentation supports Death due to lung cancer with respiratory failure. The secondary code J96.00 is included because acute respiratory failure is documented as clinically relevant. Procedure/service code MORT-DC is linked to death certificate review. Medication classification ATC N02AA01 is included for educational drug-code awareness."}, {"id": "ccase-100-mort-trauma", "group": "Mortality Coding", "title": "Case 100: Death due to fall causing hip fracture complications", "story": "Fictional training record: patient presents with clinical findings consistent with death due to fall causing hip fracture complications. Provider documentation includes initial assessment, investigations, treatment plan and final diagnosis. Students should review how codes are selected from documented diagnoses, procedures, medications and outcome notes.", "initialDx": "Death due to fall causing hip fracture complications", "secondaryDx": [{"label": "Fall external cause", "code": "W19.XXXA"}], "principalDx": {"label": "Death due to fall causing hip fracture complications", "code": "S72.001A"}, "finalDx": "Death due to fall causing hip fracture complications", "procedures": [{"label": "Death certificate review", "code": "MORT-DC"}], "surgeries": [{"label": "Underlying cause: fall", "code": "injury"}], "medications": [{"label": "Surgery history", "code": "CPT 27236"}], "mortality": [{"label": "Underlying cause: fall injury", "code": "S72.001A"}], "rule": "Assign codes only from documented provider diagnoses and supported record evidence. Principal diagnosis is the condition chiefly responsible for the encounter or admission. Secondary diagnoses are coded when they affect care, monitoring, evaluation, treatment, length of stay or resource use. Procedures, operations, medication classifications and mortality sequence must be supported by the record.", "explanation": "The principal diagnosis is coded as S72.001A because the fictional final provider documentation supports Death due to fall causing hip fracture complications. The secondary code W19.XXXA is included because fall external cause is documented as clinically relevant. Procedure/service code MORT-DC is linked to death certificate review. Medication classification CPT 27236 is included for educational drug-code awareness."}];
+  function codingGroupsV2(){ return [...new Set(codingEducationalCasesV2.map(c=>c.group))]; }
+  function codingCasesForGroupV2(group){ return group ? codingEducationalCasesV2.filter(c=>c.group===group) : []; }
+  function codeRowsV2(c){
+    const rows=[];
+    rows.push(['Principal / final diagnosis','ICD educational example',c.principalDx.code,c.principalDx.label,'Selected because it is the final documented condition responsible for the case.']);
+    (c.secondaryDx||[]).forEach(x=>rows.push(['Secondary diagnosis','ICD educational example',x.code,x.label,'Included when documented and relevant to care, monitoring, treatment or resource use.']));
+    (c.procedures||[]).forEach(x=>rows.push(['Procedure / action','CPT / LOINC / service example',x.code,x.label,'Linked to orders, investigations, services or documented care activities.']));
+    (c.surgeries||[]).forEach(x=>rows.push(['Surgical operation','CPT / procedure example',x.code,x.label,'Used when an operative/procedure report supports the surgical intervention.']));
+    (c.medications||[]).forEach(x=>rows.push(['Medication / drug classification','ATC / RxNorm / HCPCS example',x.code,x.label,'Added for educational medication-coding and drug-classification awareness.']));
+    (c.mortality||[]).forEach(x=>rows.push(['Mortality coding','Cause-of-death educational example',x.code,x.label,'Used to teach immediate, intermediate, underlying and contributing cause sequence.']));
+    return rows;
+  }
+  function codingNarrativeHtml(c){
+    const index = parseInt((c.id||'').match(/(\d+)/)?.[1] || '1', 10);
+    const ages = [7,14,28,42,56,67,73,34,63,5,80,39];
+    const sex = index % 3 === 0 ? 'male' : 'female';
+    const age = ages[index % ages.length];
+    const route = c.group==='Mortality Coding' ? 'inpatient ward after clinical deterioration' : (c.group.includes('Emergency') || c.group.includes('Respiratory') || index%2===0 ? 'emergency department' : 'outpatient clinic');
+    const sec = (c.secondaryDx||[]).map(x=>`<strong><u>${escapeHtml(x.label)}</u></strong>`).join(', ') || 'no documented secondary diagnosis';
+    const proc = (c.procedures||[]).map(x=>escapeHtml(x.label)).join(', ') || 'no procedure documented';
+    const meds = (c.medications||[]).map(x=>escapeHtml(x.label)).join(', ') || 'supportive care only';
+    const surgery = (c.surgeries||[]).length ? (c.surgeries||[]).map(x=>escapeHtml(x.label)).join(', ') : 'no surgical procedure documented';
+    let vitals = 'BP 110/70 mmHg, HR 92/min, RR 20/min, SpO₂ 97%, temperature 37.8°C';
+    if((c.group||'').includes('Respiratory')) vitals = 'BP 118/74 mmHg, HR 108/min, RR 28/min, SpO₂ 90% on room air, temperature 38.6°C';
+    if((c.group||'').includes('Circulatory')) vitals = 'BP 96/60 mmHg, HR 116/min, RR 22/min, SpO₂ 94%, chest pain score 8/10';
+    if((c.group||'').includes('Pregnancy')) vitals = 'BP 122/78 mmHg, HR 94/min, fetal movement reported, temperature 37.1°C';
+    if((c.group||'').includes('Mortality')) vitals = 'Clinical notes document progressive deterioration, resuscitation review and final outcome recorded as death/expired';
+    return `<div class="case-story-box"><h4>Patient story / medical record scenario</h4><p>A ${age}-year-old ${sex} patient presented to the ${route} with symptoms and clinical findings documented by the care team. Initial assessment suggested <strong><u>${escapeHtml(c.initialDx)}</u></strong>. Vital signs and observations: ${vitals}.</p><p>Relevant history, examination and investigations supported the final provider diagnosis of <strong><u>${escapeHtml(c.finalDx)}</u></strong>. The record also documented ${sec}. Procedures or care actions included <strong>${proc}</strong>. Medication or drug-classification items included <strong>${meds}</strong>. Surgical/procedure documentation: <strong>${surgery}</strong>.</p><p>The coding task is to review the documented story, identify the principal/final diagnosis, add supported secondary diagnoses, and link procedures, surgeries, medications and mortality coding only when supported by the record.</p></div>`;
+  }
+  function coding(){
+    const group = state.coding?.eduGroup || '';
+    const cases = codingCasesForGroupV2(group);
+    const caseId = state.coding?.eduCaseId || '';
+    const c = cases.find(x=>x.id===caseId) || null;
+    const studied=(state.coding?.studiedCases||[]).includes(caseId);
+    return html`<div class="card coding-hero educational-coding-hero"><div class="section-title" style="margin-top:0"><div><span class="pill blue">Educational Medical Coding Reference</span><h3>Medical Coding Lab</h3><p>Select a coding classification first, then select a case. Nothing is displayed before selection. Cases are organized similar to coding-book body-system and specialty classification.</p></div><span class="pill success">100 educational examples</span></div><div class="source-note">This section is for academic learning only. Codes shown are educational examples and must be verified against official coding manuals, local policy and current official code browsers before real use.</div></div>
+    <div class="card" style="margin-top:18px"><div class="section-title" style="margin-top:0"><div><h3>1. Choose coding classification</h3><p>For example, choose Respiratory System to view respiratory coding examples.</p></div></div><div class="form-grid"><div class="field"><label>Coding classification</label><select id="codingEduGroup"><option value="">Select classification...</option>${codingGroupsV2().map(g=>`<option value="${escapeHtml(g)}" ${g===group?'selected':''}>${escapeHtml(g)}</option>`).join('')}</select></div><div class="field"><label>Educational case</label><select id="codingEduCase" ${group?'':'disabled'}><option value="">Select case...</option>${cases.map(x=>`<option value="${x.id}" ${x.id===caseId?'selected':''}>${escapeHtml(x.title)}</option>`).join('')}</select></div></div>${!group?'<div class="empty">Select one coding classification to load related cases.</div>':''}${group && !c?'<div class="empty">Now select one case to view the educational coding breakdown.</div>':''}</div>
+    ${c?`<div class="grid cols-2" style="margin-top:18px"><div class="card paper-case-card"><span class="pill">${escapeHtml(c.group)}</span><h3>${escapeHtml(c.title)}</h3><div class="coding-narrative">${codingNarrativeHtml(c)}</div><div class="coding-dx-grid"><div><strong>Initial diagnosis</strong><p>${escapeHtml(c.initialDx)}</p></div><div><strong>Principal / final diagnosis</strong><p>${escapeHtml(c.finalDx)} <b>(${escapeHtml(c.principalDx.code)})</b></p></div><div><strong>Secondary diagnosis</strong><p>${c.secondaryDx.map(x=>escapeHtml(x.label)+' <b>('+escapeHtml(x.code)+')</b>').join('<br>')}</p></div><div><strong>Procedures / actions</strong><p>${c.procedures.map(x=>escapeHtml(x.label)+' <b>('+escapeHtml(x.code)+')</b>').join('<br>')}</p></div><div><strong>Surgical operations</strong><p>${c.surgeries.length?c.surgeries.map(x=>escapeHtml(x.label)+' <b>('+escapeHtml(x.code)+')</b>').join('<br>'):'No surgery documented'}</p></div><div><strong>Medications / drug codes</strong><p>${c.medications.map(x=>escapeHtml(x.label)+' <b>('+escapeHtml(x.code)+')</b>').join('<br>')}</p></div></div></div><div class="card"><h3>Coding rule focus</h3><p>${escapeHtml(c.rule)}</p><div class="alert info"><strong>Learning point:</strong> This case shows how the code is connected to the story, final diagnosis, secondary conditions, procedures, surgery, medication codes and mortality data when relevant.</div><button class="btn" id="markCodingStudied">${studied?'Case studied ✓':'Mark this coding case as studied'}</button><button class="btn outline" id="copyCodingStudy" style="margin-top:10px">Copy coding summary</button></div></div><div class="card" style="margin-top:18px"><div class="section-title" style="margin-top:0"><div><h3>Educational Coding Breakdown</h3><p>Codes are displayed for learning. This version focuses on guided viewing rather than testing.</p></div></div><div class="table-wrap"><table class="table code-breakdown-table"><thead><tr><th>Area</th><th>System</th><th>Code</th><th>Meaning</th><th>Why it is used</th></tr></thead><tbody>${codeRowsV2(c).map(r=>`<tr><td>${escapeHtml(r[0])}</td><td>${escapeHtml(r[1])}</td><td><strong>${escapeHtml(r[2])}</strong></td><td>${escapeHtml(r[3])}</td><td>${escapeHtml(r[4])}</td></tr>`).join('')}</tbody></table></div><div class="coding-explain-box"><h4>Correct educational coding explanation</h4><p>${escapeHtml(c.explanation)}</p>${c.group==='Mortality Coding'?'<p><strong>Mortality note:</strong> The underlying cause is the disease or injury that started the fatal chain. Terminal events such as cardiac arrest or respiratory failure are not automatically the underlying cause.</p>':''}</div></div>`:''}`;
+  }
+  function bindCoding(){
+    $('codingEduGroup')?.addEventListener('change',()=>{ state.coding={...(state.coding||{}), eduGroup:$('codingEduGroup').value, eduCaseId:'', result:null}; saveState(); render(); });
+    $('codingEduCase')?.addEventListener('change',()=>{ state.coding={...(state.coding||{}), eduCaseId:$('codingEduCase').value, result:null}; saveState(); render(); });
+    $('markCodingStudied')?.addEventListener('click',()=>{ const id=state.coding?.eduCaseId; if(!id) return; if(!state.coding.studiedCases) state.coding.studiedCases=[]; if(!state.coding.studiedCases.includes(id)) state.coding.studiedCases.push(id); state.coding.result={score:100,status:'Educational case studied',caseId:id}; state.quiz.coding=1; saveState(); render(); showToast('Coding case marked as studied.'); });
+    $('copyCodingStudy')?.addEventListener('click',()=>{ const group=state.coding?.eduGroup||''; const c=codingCasesForGroupV2(group).find(x=>x.id===state.coding?.eduCaseId); if(!c) return; const text=`${c.title}
+Classification: ${c.group}
+Initial diagnosis: ${c.initialDx}
+Principal/final diagnosis: ${c.finalDx} (${c.principalDx.code})
+Secondary: ${c.secondaryDx.map(x=>x.label+' ('+x.code+')').join(', ')}
+Procedures: ${c.procedures.map(x=>x.label+' ('+x.code+')').join(', ')}
+Surgery: ${c.surgeries.length?c.surgeries.map(x=>x.label+' ('+x.code+')').join(', '):'No surgery documented'}
+Medication: ${c.medications.map(x=>x.label+' ('+x.code+')').join(', ')}
+Explanation: ${c.explanation}`; navigator.clipboard.writeText(text).then(()=>showToast('Coding summary copied.')); });
+  }
+
+  function certId(course='General'){
+    const user=getActiveUser()||{name:'Student'};
+    const r=(state.quizGame?.results||{})[course] || {};
+    let raw=(user.name||'Student')+course+(r.score||0)+(r.answered||0)+(r.percent||0);
+    let h=0; for(let i=0;i<raw.length;i++){h=((h<<5)-h)+raw.charCodeAt(i); h|=0;}
+    return 'DHL-CERT-'+new Date().getFullYear()+'-'+Math.abs(h).toString(36).toUpperCase().padStart(8,'0').slice(0,8);
+  }
+  function quizCertStatus(course){
+    const r=(state.quizGame?.results||{})[course];
+    if(!r || !r.answered) return {status:'Not started', eligible:false, note:'Complete all 100 Mini Quiz questions for this course.'};
+    if((r.answered||0)<100) return {status:'In progress', eligible:false, note:`${r.answered}/100 questions completed. Finish the full course quiz first.`};
+    if((r.percent||0)<70) return {status:'Score too low', eligible:false, note:`Score is ${r.percent}%. Certificate requires at least 70%. Please retake the quiz.`};
+    return {status:'Eligible', eligible:true, note:`Score ${r.percent}% meets the certificate requirement.`};
+  }
+  function reports(){
+    const user=getActiveUser() || {name:'Student', role:'Learner'};
+    const rows=quizCourseOrder.map(c=>{const r=(state.quizGame?.results||{})[c]||{}; const st=quizCertStatus(c); return {course:c, result:r, status:st};});
+    const eligible=rows.filter(x=>x.status.eligible);
+    const attempted=rows.filter(x=>x.result.answered).length;
+    const report=`DigiHealth Lab - Portfolio & Certificate Report\n\nLearner: ${user.name}\nRole: ${user.role}\n\nMini Quiz certificate rule:\n- Each certificate is issued per completed course.\n- User must answer 100 questions in that course.\n- Minimum passing score: 70%.\n\nEligible certificates:\n${eligible.map(x=>'- '+x.course+' • '+x.result.percent+'% • Certificate ID: '+certId(x.course)).join('\n') || '- None yet'}\n\nAttempted courses: ${attempted}/${quizCourseOrder.length}\n\nThis report reflects quiz activity recorded in this browser session only.`;
+    return html`<div class="section-title" style="margin-top:0"><div><h3>Portfolio & Certificate</h3><p>Certificates are issued only for Mini Quiz Game courses completed with at least 70% correct answers. Each course certificate has its own Certificate ID and PDF download.</p></div><span class="pill success">Course certificates</span></div>
+      <div class="grid cols-3"><div class="card metric"><div class="metric-icon">🎮</div><div><h4>${attempted}</h4><p>Quiz courses attempted</p></div></div><div class="card metric"><div class="metric-icon">✅</div><div><h4>${eligible.length}</h4><p>Certificates eligible</p></div></div><div class="card metric"><div class="metric-icon">70%</div><div><h4>Pass</h4><p>Minimum required score</p></div></div></div>
+      <div class="card" style="margin-top:18px"><h3>Certificate Status by Course</h3><div class="table-wrap"><table class="table"><thead><tr><th>Course</th><th>Progress</th><th>Score</th><th>Status</th><th>Certificate</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${escapeHtml(x.course)}</td><td>${x.result.answered||0}/100</td><td>${x.result.percent!==undefined?x.result.percent+'%':'—'}</td><td>${statusPill(x.status.status)}</td><td><button class="btn small ${x.status.eligible?'':'outline'}" data-course-cert="${escapeHtml(x.course)}">${x.status.eligible?'Download PDF':'Check eligibility'}</button><br><small>${escapeHtml(x.status.note)}</small></td></tr>`).join('')}</tbody></table></div></div>
+      <div class="card" style="margin-top:18px"><h3>Portfolio Report</h3><pre id="reportText" class="report-box">${escapeHtml(report)}</pre><div class="hero-actions"><button class="btn" id="copyReport">Copy Report</button><button class="btn outline" id="printReport">Print / Save PDF</button></div></div>`;
+  }
+  function bindReports(){
+    $('copyReport')?.addEventListener('click',()=>navigator.clipboard.writeText($('reportText').innerText).then(()=>showToast('Report copied.')));
+    $('printReport')?.addEventListener('click',()=>window.print());
+    document.querySelectorAll('[data-course-cert]').forEach(btn=>btn.addEventListener('click',()=>{
+      const course=btn.dataset.courseCert;
+      const st=quizCertStatus(course);
+      if(!st.eligible) return showToast('Certificate cannot be issued: '+st.note);
+      downloadAcademyCertificatePdf(course);
+    }));
+  }
+  function downloadAcademyCertificatePdf(course){
+    const user=getActiveUser() || {name:'Student', role:'Learner'};
+    const r=(state.quizGame?.results||{})[course] || {};
+    const st=quizCertStatus(course);
+    if(!st.eligible) return showToast('Certificate cannot be issued: '+st.note);
+    const cid=certId(course);
+    const canvas=document.createElement('canvas'); canvas.width=1400; canvas.height=990; const ctx=canvas.getContext('2d');
+    const grad=ctx.createLinearGradient(0,0,1400,990); grad.addColorStop(0,'#eff6ff'); grad.addColorStop(.45,'#ffffff'); grad.addColorStop(1,'#ecfeff'); ctx.fillStyle=grad; ctx.fillRect(0,0,1400,990);
+    ctx.strokeStyle='#0f766e'; ctx.lineWidth=16; roundRect(ctx,55,55,1290,880,28); ctx.stroke(); ctx.strokeStyle='#d4af37'; ctx.lineWidth=5; roundRect(ctx,85,85,1230,820,20); ctx.stroke();
+    ctx.fillStyle='#0f766e'; ctx.beginPath(); ctx.arc(700,160,58,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.font='bold 36px Arial'; ctx.textAlign='center'; ctx.fillText('DL',700,172);
+    ctx.fillStyle='#0f172a'; ctx.font='bold 34px Arial'; ctx.fillText('DigiHealth Lab Academy',700,245);
+    ctx.fillStyle='#0f766e'; ctx.font='bold 54px Georgia'; ctx.fillText('Certificate of Course Completion',700,335);
+    ctx.fillStyle='#334155'; ctx.font='24px Arial'; ctx.fillText('This certificate is awarded to',700,392);
+    ctx.fillStyle='#0f766e'; ctx.font='bold 48px Arial'; ctx.fillText(user.name||'Student',700,462);
+    ctx.fillStyle='#334155'; ctx.font='24px Arial'; ctx.fillText('for successfully completing the Mini Quiz course:',700,520);
+    ctx.fillStyle='#0f172a'; ctx.font='bold 30px Arial'; ctx.fillText(course,700,565);
+    ctx.fillStyle='#334155'; ctx.font='22px Arial'; ctx.fillText(`Final Score: ${r.percent}% • Correct Answers: ${r.score}/100 • Passing Requirement: 70%`,700,612);
+    ctx.fillStyle='#0f172a'; ctx.font='bold 22px Arial'; ctx.fillText('Certificate ID: '+cid,700,675);
+    ctx.fillStyle='#475569'; ctx.font='18px Arial'; ctx.fillText('Issued: '+new Date().toLocaleDateString(),700,710);
+    ctx.fillStyle='#0f766e'; ctx.font='italic 34px Georgia'; ctx.fillText('DigiHealth Lab Academy',1030,790); ctx.strokeStyle='#0f766e'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(860,810); ctx.lineTo(1195,810); ctx.stroke(); ctx.fillStyle='#475569'; ctx.font='18px Arial'; ctx.fillText('Digital Signature & Academy Validation',1030,842);
+    ctx.textAlign='left'; ctx.fillStyle='#475569'; ctx.font='18px Arial'; ctx.fillText('Designed by Motahhareh Khorshidzadeh',145,790); ctx.fillText('Health IT Specialist | HIS & EMR Systems Consultant',145,822); ctx.fillText('Researcher in Digital Health',145,854);
+    ctx.textAlign='center'; ctx.font='15px Arial'; ctx.fillText('Certificate generated from recorded Mini Quiz Game results in this browser session.',700,900);
+    const dataUrl=canvas.toDataURL('image/jpeg',0.95); const pdf=pdfFromJpegDataUrl(dataUrl, canvas.width, canvas.height); const blob=new Blob([pdf],{type:'application/pdf'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='DigiHealth_Lab_Certificate_'+course.replace(/[^a-z0-9]+/gi,'_')+'_'+cid+'.pdf'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); showToast('Professional PDF certificate downloaded.');
+  }
+  function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
+  function pdfFromJpegDataUrl(dataUrl,w,h){
+    const binary=atob(dataUrl.split(',')[1]);
+    const imgLen=binary.length; const pageW=842; const pageH=595; const objs=[];
+    function obj(str){objs.push(str);}
+    obj('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+    obj('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+    obj(`3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`);
+    obj(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imgLen} >>\nstream\n${binary}\nendstream\nendobj\n`);
+    const content=`q\n${pageW} 0 0 ${pageH} 0 0 cm\n/Im0 Do\nQ`;
+    obj(`5 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`);
+    let pdf='%PDF-1.4\n'; const offsets=[0]; objs.forEach(o=>{offsets.push(pdf.length); pdf+=o;});
+    const xref=pdf.length; pdf+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`;
+    for(let i=1;i<offsets.length;i++) pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
+    pdf+=`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    const arr=new Uint8Array(pdf.length); for(let i=0;i<pdf.length;i++) arr[i]=pdf.charCodeAt(i)&0xff; return arr;
+  }
+
+
+
+
+  function setupInstall(){ /* Web version: no install prompt needed. */ }
+
+  function boot(){
+    initAuth();
+    $('menuToggle')?.addEventListener('click',()=>$('sidebar').classList.toggle('open'));
+    if(getActiveUser()) { render(); }
+    setupInstall();
+  }
+  return {boot};
+})();
+
+document.addEventListener('DOMContentLoaded', App.boot);
