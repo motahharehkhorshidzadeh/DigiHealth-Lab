@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" role="img" aria-label="Release of Information Control">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ecfeff"/><stop offset="1" stop-color="#eff6ff"/></linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f766e"/><stop offset="1" stop-color="#0ea5e9"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.16"/></filter>
+  </defs>
+  <rect width="900" height="520" rx="34" fill="url(#bg)"/>
+  <circle cx="810" cy="80" r="90" fill="#ccfbf1" opacity="0.55"/>
+  <circle cx="90" cy="445" r="120" fill="#dbeafe" opacity="0.65"/>
+  <text x="54" y="64" font-family="Arial, sans-serif" font-size="30" font-weight="800" fill="#0f172a">Release of Information Control</text>
+  <text x="54" y="100" font-family="Arial, sans-serif" font-size="17" fill="#475569">Disclosure requests require verification, authorization, logging and secure delivery.</text>
+  <g filter="url(#shadow)"><rect x="95" y="150" width="710" height="260" rx="26" fill="#fff" stroke="#bfdbfe"/>
+<g transform="translate(128,212)"><rect width="150" height="118" rx="18" fill="#eff6ff" stroke="#bfdbfe"/><text x="75" y="45" text-anchor="middle" font-family="Arial" font-size="34">🙋</text><text x="75" y="78" text-anchor="middle" font-family="Arial" font-size="14" fill="#334155">Request</text></g>
+<g transform="translate(302,212)"><rect width="150" height="118" rx="18" fill="#f0fdfa" stroke="#99f6e4"/><text x="75" y="45" text-anchor="middle" font-family="Arial" font-size="34">🪪</text><text x="75" y="78" text-anchor="middle" font-family="Arial" font-size="14" fill="#334155">Identity/Auth</text></g>
+<g transform="translate(476,212)"><rect width="150" height="118" rx="18" fill="#ecfeff" stroke="#67e8f9"/><text x="75" y="45" text-anchor="middle" font-family="Arial" font-size="34">📋</text><text x="75" y="78" text-anchor="middle" font-family="Arial" font-size="14" fill="#334155">Disclosure Log</text></g>
+<g transform="translate(650,212)"><rect width="120" height="118" rx="18" fill="#fff7ed" stroke="#fed7aa"/><text x="60" y="45" text-anchor="middle" font-family="Arial" font-size="34">🔒</text><text x="60" y="78" text-anchor="middle" font-family="Arial" font-size="14" fill="#334155">Release</text></g>
+<text x="450" y="365" text-anchor="middle" font-family="Arial" font-size="16" fill="#475569">Release only to authorized persons and document what, when, why and to whom.</text>
+</g>
+</svg>
